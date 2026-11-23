@@ -181,7 +181,7 @@ function ytParse(u) {
     else if (h === "youtube.com" || h === "music.youtube.com") v = x.searchParams.get("v") || (/^\/(embed|shorts|live)\//.test(x.pathname) ? x.pathname.split("/")[2] : null);
     else return null;
     if (v && !ID.test(v)) v = null;
-    const L = list && /^[\w-]{10,}$/.test(list) ? list : null;
+    const L = list && /^[\w-]{10,}$/.test(list) && !/^RD/.test(list) ? list : null; // danh sách "Mix" (RD...) không nhúng được: phát lặp lại riêng bài này
     return (v || L) ? { v, list: L } : null;
   } catch { return null; }
 }
