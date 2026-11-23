@@ -422,6 +422,7 @@ def main():
     log(f"{len(sources)} nguồn đang bật; hôm nay còn được thêm {budget} bài.")
 
     candidates, mark_seen, failed = [], [], 0
+    item_errors = 0
     for s in sources:
         try:
             entries, method, feed = get_entries(s)
@@ -490,14 +491,17 @@ def main():
             log(f"   xong ({who})")
         except Exception as ex:
             log("   LỖI, sẽ thử lại lần quét sau:", str(ex)[:200])
+            item_errors += 1
 
-    ok = not (sources and failed == len(sources))
+    ok = not (sources and failed == len(sources)) and item_errors == 0
     note = f"{failed} nguồn lỗi" if failed else None
     if run_id:
         db.patch("runs", {"id": "eq." + run_id},
                  {"finished_at": dt.datetime.now(dt.timezone.utc).isoformat(), "ok": ok,
                   "found": len(candidates), "added": added, "note": note})
-    log(f"Hoàn tất: thêm {added} bài.")
+    log(f"Hoàn tất: thêm {added} bài." + ("" if ok else " (chưa trọn vẹn, sẽ thử lại)"))
+    if not ok and a.skip_if_done_today:
+        sys.exit(1)  # báo lỗi để lịch tự thử lại sau 1 giờ
 
 
 if __name__ == "__main__":
