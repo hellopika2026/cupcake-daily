@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow,noarchive">
+<title>Cupcake Daily</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="hdr"><div class="hdr-in">
+  <div class="brand"><span class="logo"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14l-1.6 8H6.6z"/><path d="M6 12a6 5 0 0 1 12 0"/><circle cx="12" cy="4.6" r="1.2"/></svg></span>Cupcake Daily</div>
+  <div class="right"><a href="admin.html">Quản trị</a></div>
+</div></header>
+<main>
+  <section style="display:flex;flex-direction:column;gap:10px">
+    <div class="kicker">TIN MỖI NGÀY</div>
+    <h1 id="hero">Đang tải…</h1>
+    <p class="sub" id="sub"></p>
+  </section>
+  <section class="toolbar">
+    <div class="search"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6B7391" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="q" type="search" placeholder="Tìm bài viết" aria-label="Tìm bài viết"></div>
+    <div class="pills" id="ranges"></div>
+    <div class="pills srcs" id="srcs"></div>
+  </section>
+  <div id="list"></div>
+  <div class="more">
+    <button class="btn" id="more" hidden>Xem các ngày trước</button>
+    <span class="tagline">Cupcake Daily · Tờ báo nhỏ của Cupcake, mỗi sáng một lần</span>
+    <span class="small">Bài do hệ thống tự thu thập từ các nguồn bạn chọn. Bài không có ảnh vẫn hiện thành thẻ chữ.</span>
+  </div>
+</main>
+<script src="config.js"></script>
+<script>
+const C = window.CUPCAKE, PAGE = 120;
+const H = { apikey: C.anonKey, Authorization: "Bearer " + C.anonKey };
+const st = { arts: [], srcs: {}, hidden: new Set(), range: "today", q: "", offset: 0, done: false, last: null };
+const $ = id => document.getElementById(id);
+const el = (t, props = {}, kids = []) => { const e = document.createElement(t);
+  for (const k in props) { if (k === "text") e.textContent = props[k]; else if (k === "class") e.className = props[k]; else if (k === "style") e.style.cssText = props[k]; else e.setAttribute(k, props[k]); }
+  [].concat(kids).forEach(c => c && e.append(c)); return e; };
+const vnDay = d => new Date(d.getTime() + 7 * 3600e3).toISOString().slice(0, 10);
+const vnTime = d => new Date(d.getTime() + 7 * 3600e3).toISOString().slice(11, 16);
+const safeUrl = u => { try { const x = new URL(u); return /^https?:$/.test(x.protocol) ? x.href : null; } catch { return null; } };
+const DOW = ["Chủ nhật","Thứ Hai","Thứ Ba","Thứ Tư","Thứ Năm","Thứ Sáu","Thứ Bảy"];
+function dayLabel(key) {
+  const now = new Date(), t = vnDay(now), y = vnDay(new Date(now - 864e5));
+  if (key === t) return "Hôm nay"; if (key === y) return "Hôm qua";
+  const d = new Date(key + "T00:00:00Z"); return DOW[d.getUTCDay()] + ", " + key.slice(8) + "/" + key.slice(5, 7);
+}
+async function api(path) { const r = await fetch(C.url + "/rest/v1/" + path, { headers: H }); if (!r.ok) throw new Error(r.status); return r.json(); }
+
+async function load(more) {
+  const rows = await api(`articles?select=*&order=created_at.desc&limit=${PAGE}&offset=${st.offset}`);
+  st.arts = st.arts.concat(rows); st.offset += rows.length; st.done = rows.length < PAGE;
+}
+async function init() {
+  try {
+    const [srcs, last] = await Promise.all([
+      api("public_sources?select=*"),
+      fetch(C.url + "/rest/v1/rpc/public_last_run", { method: "POST", headers: { ...H, "Content-Type": "application/json" }, body: "{}" }).then(r => r.json()).catch(() => null)]);
+    srcs.forEach(s => st.srcs[s.id] = s); st.last = last;
+    await load();
+  } catch (e) {
+    $("hero").textContent = "Chưa kết nối được dữ liệu.";
+    $("sub").textContent = "Kiểm tra lại cấu hình Supabase trong config.js."; return;
+  }
+  render();
+}
+function inRange(a) {
+  const d = new Date(a.created_at), age = (Date.now() - d) / 864e5;
+  if (st.range === "today") return vnDay(d) === vnDay(new Date());
+  if (st.range === "week") return age <= 7; return true;
+}
+function visible() {
+  const q = st.q.trim().toLowerCase();
+  return st.arts.filter(a => inRange(a) && !st.hidden.has(a.source_id) &&
+    (!q || (a.title_vi + " " + a.summary_vi + " " + (a.tags || []).join(" ")).toLowerCase().includes(q)));
+}
+function render() {
+  const todayN = st.arts.filter(a => vnDay(new Date(a.created_at)) === vnDay(new Date())).length;
+  $("hero").textContent = todayN ? `Hôm nay có ${todayN} bài mới.` : "Hôm nay chưa có bài mới.";
+  const n = Object.keys(st.srcs).length;
+  $("sub").textContent = (st.last ? `Cập nhật lần cuối lúc ${vnTime(new Date(st.last))}` + (vnDay(new Date(st.last)) !== vnDay(new Date()) ? " ngày " + vnDay(new Date(st.last)).slice(8) + "/" + vnDay(new Date(st.last)).slice(5, 7) : "") + ", " : "") + `từ ${n} nguồn bạn đã chọn.`;
+  // bộ lọc thời gian
+  const rg = $("ranges"); rg.replaceChildren();
+  [["today", "Hôm nay"], ["week", "7 ngày"], ["all", "Tất cả"]].forEach(([k, t]) => {
+    const b = el("button", { class: "pill solid", type: "button", "aria-pressed": st.range === k, text: t });
+    b.onclick = () => { st.range = k; render(); }; rg.append(b); });
+  // nguồn
+  const sr = $("srcs"); sr.replaceChildren();
+  const counts = {}; st.arts.filter(inRange).forEach(a => counts[a.source_id] = (counts[a.source_id] || 0) + 1);
+  Object.values(st.srcs).forEach(s => {
+    const b = el("button", { class: "pill src", type: "button", "aria-pressed": !st.hidden.has(s.id) },
+      [el("span", { class: "dot", style: "background:" + s.color }), s.name, el("span", { class: "n", text: counts[s.id] || 0 })]);
+    b.onclick = () => { st.hidden.has(s.id) ? st.hidden.delete(s.id) : st.hidden.add(s.id); render(); }; sr.append(b); });
+  // thẻ theo ngày
+  const list = $("list"); list.replaceChildren();
+  const vis = visible();
+  if (!vis.length) list.append(el("div", { class: "empty", text: st.range === "today" ? "Hôm nay chưa có bài mới. Thử chọn “7 ngày” hoặc “Tất cả”." : "Không có bài nào khớp." }));
+  const byDay = {}; vis.forEach(a => (byDay[vnDay(new Date(a.created_at))] ||= []).push(a));
+  Object.keys(byDay).sort().reverse().forEach(key => {
+    const cols = el("div", { class: "cols" });
+    byDay[key].forEach((a, i) => cols.append(card(a, i)));
+    list.append(el("section", { class: "day" }, [el("div", { class: "day-h" }, [el("h2", { text: dayLabel(key) }), el("span", { text: byDay[key].length + " bài" })]), cols]));
+  });
+  $("more").hidden = st.done; $("more").onclick = async () => { $("more").disabled = true; await load(true); $("more").disabled = false; render(); };
+}
+function card(a, i) {
+  const s = st.srcs[a.source_id] || { name: "Nguồn", color: "#3B5BFF" };
+  const link = safeUrl(a.link), img = safeUrl(a.image_url);
+  const c = el("article", { class: "card" + (img ? "" : (i % 3 === 1 ? " lav big" : i % 3 === 2 ? " mint" : "")) });
+  if (img) { const im = el("img", { src: img, alt: "", loading: "lazy", referrerpolicy: "no-referrer" });
+    im.onerror = () => { im.remove(); c.classList.add(i % 2 ? "lav" : "mint"); }; c.append(im); }
+  const dom = link ? new URL(link).hostname.replace(/^www\./, "") : "";
+  c.append(el("div", { class: "bd" }, [
+    el("div", { class: "meta" }, [
+      el("span", { class: "chip", style: `background:${s.color}24` }, [el("i", { style: "background:" + s.color }), s.name]),
+      el("span", { text: vnTime(new Date(a.created_at)) + (a.read_minutes ? ` · ${a.read_minutes} phút đọc` : "") })]),
+    el("h3", { text: a.title_vi }), el("p", { text: a.summary_vi }),
+    (a.tags && a.tags.length) ? el("div", { class: "tags" }, a.tags.map(t => el("span", { class: "tag", text: t }))) : null,
+    el("div", { class: "foot" }, [
+      link ? el("a", { class: "read", href: link, target: "_blank", rel: "noopener noreferrer", text: "Đọc bài gốc ↗" }) : null,
+      el("span", { class: "dom", text: dom })])]));
+  return c;
+}
+$("q").oninput = e => { st.q = e.target.value; render(); };
+init();
+</script>
+</body>
+</html>
