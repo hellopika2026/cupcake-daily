@@ -369,6 +369,82 @@ def summarize(source, title, text, mode):
     raise RuntimeError(last or "AI lỗi")
 
 
+# ------------------------------------------------------------------ Lấy bài cũ theo yêu cầu
+def run_backfill(db, job_id, mode):
+    """Lấy N bài gần nhất của 1 nguồn (không phân biệt hôm nay hay cũ), tóm tắt và đưa lên trang chủ.
+    Bỏ qua: cửa sổ giờ, hạn mức mỗi ngày, bộ lọc từ khóa, 'hôm nay đã quét'. Bài đã có trên web thì không lấy lại."""
+    if not re.fullmatch(r"[0-9a-fA-F-]{36}", job_id or ""):
+        sys.exit("Mã yêu cầu không hợp lệ")
+    jobs = db.select("backfill_jobs", {"select": "*", "id": "eq." + job_id})
+    if not jobs:
+        sys.exit("Không tìm thấy yêu cầu " + job_id)
+    job = jobs[0]
+
+    def upd(**kw):
+        db.patch("backfill_jobs", {"id": "eq." + job_id}, kw)
+
+    upd(status="running", started_at=dt.datetime.now(dt.timezone.utc).isoformat())
+    added = errors = too_short = 0
+    try:
+        srcs = db.select("sources", {"select": "*", "id": "eq." + str(job["source_id"])})
+        if not srcs:
+            raise RuntimeError("Nguồn không còn tồn tại")
+        s = srcs[0]
+        count = max(1, min(int(job["requested"]), 20))
+        st = {r["key"]: r["value"] for r in db.select("settings")}
+        want_image = bool(st.get("fetch_images", True))
+
+        entries, method, _feed = get_entries(s)
+        if any(e["published"] for e in entries):  # có ngày thì xếp mới nhất lên đầu; không có ngày thì giữ thứ tự của nguồn
+            entries.sort(key=lambda e: e["published"] or dt.datetime.min.replace(tzinfo=dt.timezone.utc), reverse=True)
+        top = entries[:count]
+        log(f"[{s['name']}] {method}: đọc được {len(entries)} bài, lấy {len(top)} bài gần nhất.")
+
+        existing = {r["link"] for r in db.select("articles", {"select": "link"})}
+        todo = [e for e in top if e["link"] not in existing]
+        have = len(top) - len(todo)
+        if have:
+            log(f"{have} bài đã có sẵn trên trang, bỏ qua.")
+
+        now = dt.datetime.now(dt.timezone.utc)
+        for e in todo:
+            log(f"- {e['title'][:70] or e['link']}")
+            try:
+                art = fetch_article(e, want_image)
+                if len(art["text"]) < 120:
+                    log("   nội dung quá ngắn, bỏ qua"); too_short += 1
+                    continue
+                res, who = summarize(s["name"], art["title"], art["text"], mode)
+                row = {"source_id": s["id"], "link": e["link"], "title_vi": res["title_vi"],
+                       "summary_vi": res["summary_vi"], "tags": res["tags"], "image_url": art["image"],
+                       "read_minutes": max(1, round(len(art["text"].split()) / 200)),
+                       "published_at": (e["published"] or now).isoformat(), "backfilled": True}
+                db.insert("articles", [row], ignore_dups=True, on_conflict="link")
+                db.insert("seen", [{"link": e["link"], "source_id": s["id"]}], ignore_dups=True, on_conflict="link")
+                added += 1
+                log(f"   xong ({who})")
+            except Exception as ex:
+                errors += 1
+                log("   LỖI:", str(ex)[:200])
+
+        parts = [f"đọc được {len(entries)} bài, lấy {len(top)}", f"thêm {added}"]
+        if have: parts.append(f"{have} bài đã có sẵn")
+        if too_short: parts.append(f"{too_short} bài quá ngắn")
+        if errors: parts.append(f"{errors} bài lỗi")
+        failed = errors > 0 and added == 0
+        upd(status="failed" if failed else "done", added=added, note=", ".join(parts),
+            finished_at=dt.datetime.now(dt.timezone.utc).isoformat())
+        log("Hoàn tất:", ", ".join(parts))
+        if failed:
+            sys.exit(1)
+    except SystemExit:
+        raise
+    except Exception as ex:
+        log("LỖI:", str(ex)[:300])
+        upd(status="failed", added=added, note=str(ex)[:300], finished_at=dt.datetime.now(dt.timezone.utc).isoformat())
+        sys.exit(1)
+
+
 # ------------------------------------------------------------------ Chạy chính
 def main():
     ap = argparse.ArgumentParser()
@@ -376,6 +452,7 @@ def main():
     ap.add_argument("--skip-if-done-today", action="store_true")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--test-llm", action="store_true")
+    ap.add_argument("--backfill-job", metavar="JOB_ID", help="xử lý 1 yêu cầu 'Lấy bài cũ' trong bảng backfill_jobs")
     a = ap.parse_args()
 
     if a.test_llm:
@@ -386,6 +463,8 @@ def main():
         log("OK, dùng", who); print(json.dumps(r, ensure_ascii=False, indent=2)); return
 
     db = DB()
+    if a.backfill_job:
+        run_backfill(db, a.backfill_job, a.mode); return
     now = dt.datetime.now(dt.timezone.utc)
     today0 = dt.datetime.now(VN).replace(hour=0, minute=0, second=0, microsecond=0).astimezone(dt.timezone.utc)
 
@@ -417,7 +496,11 @@ def main():
     sources = db.select("sources", {"select": "*", "active": "eq.true"})
     seen_since = (now - dt.timedelta(days=120)).isoformat()
     seen = {r["link"] for r in db.select("seen", {"select": "link", "created_at": "gte." + seen_since})}
-    already_today = len(db.select("articles", {"select": "id", "created_at": "gte." + today0.isoformat()}))
+    try:  # bài "lấy bài cũ" không tính vào hạn mức mỗi ngày
+        already_today = len(db.select("articles", {"select": "id", "created_at": "gte." + today0.isoformat(),
+                                                   "backfilled": "eq.false"}))
+    except RuntimeError:  # chưa chạy schema.sql mới (chưa có cột backfilled)
+        already_today = len(db.select("articles", {"select": "id", "created_at": "gte." + today0.isoformat()}))
     budget = max(0, max_per_day - already_today)
     log(f"{len(sources)} nguồn đang bật; hôm nay còn được thêm {budget} bài.")
 

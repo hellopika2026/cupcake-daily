@@ -1,0 +1,32 @@
+name: Lấy bài cũ theo yêu cầu
+on:
+  workflow_dispatch:
+    inputs:
+      job_id:
+        description: "Mã yêu cầu trong bảng backfill_jobs (do nút 'Lấy bài cũ' trong trang quản trị tạo ra)"
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: backfill
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: robot/requirements.txt
+      - run: pip install -r robot/requirements.txt
+      - name: Lấy và tóm tắt bài
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+          JOB_ID: ${{ inputs.job_id }}
+          PYTHONIOENCODING: utf-8
+        run: python robot/cupcake_robot.py --mode backup --backfill-job "$JOB_ID"

@@ -198,6 +198,34 @@ grant execute on function admin_login(text), admin_list_sources(text),
   admin_delete_source(text,uuid), admin_get_settings(text), admin_set_setting(text,text,jsonb),
   admin_recent_runs(text) to anon, authenticated;
 
+-- ---------- Lấy bài cũ theo yêu cầu (nút "Lấy bài cũ" trong trang quản trị) ----------
+-- Bài lấy thêm được đánh dấu để KHÔNG bị tính vào hạn mức "số bài tối đa mỗi ngày" của lần quét thường.
+alter table articles add column if not exists backfilled boolean not null default false;
+
+create table if not exists backfill_jobs (
+  id          uuid primary key default gen_random_uuid(),
+  source_id   uuid references sources(id) on delete cascade,
+  requested   int  not null check (requested between 1 and 20),
+  status      text not null default 'queued' check (status in ('queued','running','done','failed')),
+  added       int  not null default 0,
+  note        text,
+  created_at  timestamptz not null default now(),
+  started_at  timestamptz,
+  finished_at timestamptz
+);
+alter table backfill_jobs enable row level security;  -- không có policy: chỉ hàm bên dưới và khóa service_role đụng được
+
+create or replace function admin_backfill_jobs(pw text) returns json
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  if not _check_pw(pw) then raise exception 'Sai mật khẩu'; end if;
+  return coalesce((select json_agg(t) from (
+    select j.id, j.requested, j.status, j.added, j.note, j.created_at, j.finished_at, s.name as source_name
+    from backfill_jobs j left join sources s on s.id = j.source_id
+    order by j.created_at desc limit 8) t), '[]'::json);
+end $$;
+grant execute on function admin_backfill_jobs(text) to anon, authenticated;
+
 -- =====================================================================
 -- ĐẶT MẬT KHẨU QUẢN TRỊ: sửa chữ ĐỔI_MẬT_KHẨU_Ở_ĐÂY thành mật khẩu của bạn rồi chạy MỘT LẦN.
 -- (Đổi mật khẩu sau này: chạy lại đúng dòng này với mật khẩu mới.)
