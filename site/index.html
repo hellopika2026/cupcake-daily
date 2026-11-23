@@ -40,7 +40,6 @@
     <div class="search"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#111111" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
       <input id="q" type="search" placeholder="Tìm bài viết" aria-label="Tìm bài viết"></div>
     <div class="pills" id="ranges"></div>
-    <div class="pills srcs" id="srcs"></div>
   </section>
   <div id="list"></div>
   <div class="more">
@@ -55,7 +54,7 @@
 <script>
 const C = window.CUPCAKE, PAGE = 120;
 const H = { apikey: C.anonKey, Authorization: "Bearer " + C.anonKey };
-const st = { arts: [], srcs: {}, hidden: new Set(), range: "today", q: "", offset: 0, done: false, last: null };
+const st = { arts: [], srcs: {}, range: "today", q: "", offset: 0, done: false, last: null };
 const $ = id => document.getElementById(id);
 const el = (t, props = {}, kids = []) => { const e = document.createElement(t);
   for (const k in props) { if (k === "text") e.textContent = props[k]; else if (k === "class") e.className = props[k]; else if (k === "style") e.style.cssText = props[k]; else e.setAttribute(k, props[k]); }
@@ -95,7 +94,7 @@ function inRange(a) {
 }
 function visible() {
   const q = st.q.trim().toLowerCase();
-  return st.arts.filter(a => inRange(a) && !st.hidden.has(a.source_id) &&
+  return st.arts.filter(a => inRange(a) &&
     (!q || (a.title_vi + " " + a.summary_vi + " " + (a.tags || []).join(" ")).toLowerCase().includes(q)));
 }
 function render() {
@@ -108,13 +107,6 @@ function render() {
   [["today", "Hôm nay"], ["week", "7 ngày"], ["all", "Tất cả"]].forEach(([k, t]) => {
     const b = el("button", { class: "pill solid", type: "button", "aria-pressed": st.range === k, text: t });
     b.onclick = () => { st.range = k; render(); }; rg.append(b); });
-  // nguồn
-  const sr = $("srcs"); sr.replaceChildren();
-  const counts = {}; st.arts.filter(inRange).forEach(a => counts[a.source_id] = (counts[a.source_id] || 0) + 1);
-  Object.values(st.srcs).forEach(s => {
-    const b = el("button", { class: "pill src", type: "button", "aria-pressed": !st.hidden.has(s.id) },
-      [el("span", { class: "dot", style: "background:" + s.color }), s.name, el("span", { class: "n", text: counts[s.id] || 0 })]);
-    b.onclick = () => { st.hidden.has(s.id) ? st.hidden.delete(s.id) : st.hidden.add(s.id); render(); }; sr.append(b); });
   // thẻ theo ngày
   const list = $("list"); list.replaceChildren();
   const vis = visible();
