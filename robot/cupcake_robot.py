@@ -362,13 +362,15 @@ def summarize(source, title, text, mode):
         order = ["agy"]
     last = None
     for name in order:
-        for attempt in (1, 2):
+        tries = 2 if name == "agy" else 5  # Gemini hay báo "nhu cầu cao" (503) tạm thời, nên thử lại kiên nhẫn hơn
+        for attempt in range(1, tries + 1):
             try:
                 return (llm_agy if name == "agy" else llm_gemini)(prompt), name
             except Exception as e:
                 last = f"{name}: {e}"
                 log(f"   AI ({name}) lần {attempt} lỗi: {str(e)[:150]}")
-                time.sleep(2)
+                if attempt < tries:
+                    time.sleep(2 if name == "agy" else min(40, 5 * 2 ** (attempt - 1)))
     raise RuntimeError(last or "AI lỗi")
 
 
