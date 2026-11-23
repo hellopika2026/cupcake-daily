@@ -1,12 +1,10 @@
 // Hàm "Lấy bài cũ" cho trang quản trị Cupcake Daily.
-// Kiểm tra mật khẩu admin -> ghi 1 yêu cầu vào bảng backfill_jobs -> kích hoạt workflow GitHub "backfill.yml".
-// Token GitHub chỉ nằm ở đây (secret của Supabase), không bao giờ nằm trong trang web.
+// Kiểm tra mật khẩu admin -> đọc feed của nguồn -> lấy N bài gần nhất -> ghi thẳng vào bảng articles.
+// KHÔNG dùng AI: tiêu đề và phần tóm tắt lấy từ chính feed (mô tả do tác giả viết). Bài lên trang ngay.
+// Quét hằng ngày (robot) vẫn dùng AI như cũ.
 //
-// Secrets cần đặt (Supabase > Edge Functions > Secrets, hoặc `supabase secrets set`):
-//   GH_TOKEN  : fine-grained token của riêng repo này, quyền "Actions: Read and write"
-//   GH_REPO   : (tùy chọn) mặc định hellopika2026/cupcake-daily
-//   GH_REF    : (tùy chọn) nhánh chứa workflow, mặc định main
 // SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY được Supabase tự cung cấp.
+import { buildSummary, type FeedItem, parseFeedItems } from "./feed.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -14,9 +12,10 @@ const CORS = {
 };
 const json = (o: unknown, status = 200) =>
   new Response(JSON.stringify(o), { status, headers: { ...CORS, "Content-Type": "application/json" } });
-import { type FeedItem, parseFeedItems } from "./feed.ts";
-
 const UA = "Mozilla/5.0 (compatible; CupcakeDailyBot/1.0; +personal-reader)";
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MAX_COUNT = 20;
+
 async function getText(url: string): Promise<string> {
   const ctl = new AbortController();
   const t = setTimeout(() => ctl.abort(), 20000);
@@ -26,8 +25,6 @@ async function getText(url: string): Promise<string> {
     return await r.text();
   } finally { clearTimeout(t); }
 }
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const MAX_COUNT = 20;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
@@ -36,9 +33,6 @@ Deno.serve(async (req) => {
     const base = Deno.env.get("SUPABASE_URL")!;
     const anon = Deno.env.get("SUPABASE_ANON_KEY")!;
     const svc = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const ghToken = Deno.env.get("GH_TOKEN");
-    const ghRepo = Deno.env.get("GH_REPO") || "hellopika2026/cupcake-daily";
-    const ghRef = Deno.env.get("GH_REF") || "main";
 
     // 1) Mật khẩu admin (dùng chính hàm admin_login, có giới hạn thử sai)
     const auth = await fetch(`${base}/rest/v1/rpc/admin_login`, {
@@ -52,60 +46,64 @@ Deno.serve(async (req) => {
     const n = Number(count);
     if (!UUID.test(String(source_id || ""))) return json({ error: "Nguồn không hợp lệ" }, 400);
     if (!Number.isInteger(n) || n < 1 || n > MAX_COUNT) return json({ error: `Số bài phải từ 1 đến ${MAX_COUNT}` }, 400);
-    if (!ghToken) return json({ error: "Chưa cài GH_TOKEN trong Supabase (xem hướng dẫn)." }, 500);
 
     const H = { apikey: svc, Authorization: "Bearer " + svc, "Content-Type": "application/json" };
 
-    // 3) Nguồn phải tồn tại
+    // 3) Nguồn phải tồn tại và là RSS/Atom
     const src = await (await fetch(`${base}/rest/v1/sources?select=id,url,feed_url,method&id=eq.${source_id}`, { headers: H })).json();
     if (!Array.isArray(src) || !src.length) return json({ error: "Không tìm thấy nguồn này" }, 404);
-
-    // 3b) Đọc sẵn bài ở đây (Supabase đọc được Substack, còn máy chủ GitHub thì bị chặn 403).
-    //     Robot trên GitHub chỉ việc lấy nội dung đã lưu để tóm tắt. Nguồn không phải RSS thì để robot tự đọc.
-    let items: FeedItem[] | null = null;
-    if (src[0].method === "rss" || src[0].feed_url) {
-      const feedUrl = src[0].feed_url || src[0].url;
-      try {
-        items = parseFeedItems(await getText(feedUrl), feedUrl);
-      } catch (e) {
-        return json({ error: `Không đọc được nguồn này lúc này (${(e as Error).message}). Thử lại sau nhé.` }, 502);
-      }
-      if (!items || !items.length) return json({ error: "Nguồn này không có bài nào để lấy." }, 422);
-      items = items.slice(0, n);
+    if (!src[0].feed_url && src[0].method !== "rss") {
+      return json({ error: "Nguồn này không có RSS nên chưa lấy bài cũ bằng nút này được." }, 422);
     }
 
-    // 4) Mỗi lúc chỉ 1 lượt (tránh bấm dồn làm tốn lượt AI). Yêu cầu treo quá 30 phút coi như hỏng.
-    const since = new Date(Date.now() - 30 * 60 * 1000).toISOString();
-    const busy = await (await fetch(
-      `${base}/rest/v1/backfill_jobs?select=id&status=in.(queued,running)&created_at=gte.${since}&limit=1`, { headers: H })).json();
-    if (Array.isArray(busy) && busy.length) return json({ error: "Đang có một lượt lấy bài chạy. Đợi xong rồi bấm tiếp nhé." }, 409);
+    // 4) Đọc feed, lấy N bài mới nhất
+    const feedUrl: string = src[0].feed_url || src[0].url;
+    let all: FeedItem[] | null;
+    try {
+      all = parseFeedItems(await getText(feedUrl), feedUrl);
+    } catch (e) {
+      return json({ error: `Không đọc được nguồn này lúc này (${(e as Error).message}). Thử lại sau nhé.` }, 502);
+    }
+    if (!all || !all.length) return json({ error: "Nguồn này không có bài nào để lấy." }, 422);
+    const top = all.slice(0, n);
 
-    // 5) Ghi yêu cầu
-    const ins = await fetch(`${base}/rest/v1/backfill_jobs`, {
-      method: "POST", headers: { ...H, Prefer: "return=representation" },
-      body: JSON.stringify([{ source_id, requested: n, items }]),
-    });
-    const rows = await ins.json();
-    if (!ins.ok || !rows?.[0]?.id) return json({ error: "Không tạo được yêu cầu. Đã chạy lại file schema.sql chưa?" }, 500);
-    const jobId = rows[0].id as string;
+    // 5) Dựng bài (không AI) và ghi vào database
+    const set = await (await fetch(`${base}/rest/v1/settings?select=value&key=eq.fetch_images`, { headers: H })).json();
+    const wantImage = !(Array.isArray(set) && set[0] && set[0].value === false);
+    const now = new Date().toISOString();
+    const rows = top.map((it) => ({
+      source_id, link: it.link, title_vi: it.title, summary_vi: buildSummary(it), tags: [] as string[],
+      image_url: wantImage ? it.image : null,
+      read_minutes: Math.max(1, Math.round(it.text.split(/\s+/).filter(Boolean).length / 200)),
+      published_at: it.published || now, backfilled: true,
+    })).filter((r) => r.title_vi.length >= 3 && r.summary_vi.length >= 20);
+    const skippedEmpty = top.length - rows.length;
 
-    // 6) Kích hoạt workflow trên GitHub (chỉ gửi mã yêu cầu, robot tự đọc phần còn lại từ cơ sở dữ liệu)
-    const gh = await fetch(`https://api.github.com/repos/${ghRepo}/actions/workflows/backfill.yml/dispatches`, {
-      method: "POST",
-      headers: {
-        Authorization: "Bearer " + ghToken, Accept: "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "cupcake-daily-backfill",
-      },
-      body: JSON.stringify({ ref: ghRef, inputs: { job_id: jobId } }),
-    });
-    if (gh.status !== 204) {
-      const why = `GitHub từ chối (${gh.status}). Kiểm tra GH_TOKEN, GH_REPO và file backfill.yml đã được đẩy lên nhánh ${ghRef}.`;
-      await fetch(`${base}/rest/v1/backfill_jobs?id=eq.${jobId}`, {
-        method: "PATCH", headers: H, body: JSON.stringify({ status: "failed", note: why, finished_at: new Date().toISOString() }),
+    let added = 0;
+    if (rows.length) {
+      // ignore-duplicates: bài đã có (trùng link) bị bỏ qua, chỉ trả về những dòng thật sự mới
+      const ins = await fetch(`${base}/rest/v1/articles?on_conflict=link`, {
+        method: "POST", headers: { ...H, Prefer: "resolution=ignore-duplicates,return=representation" }, body: JSON.stringify(rows),
       });
-      return json({ error: why }, 502);
+      const inserted = await ins.json();
+      if (!ins.ok || !Array.isArray(inserted)) return json({ error: "Không ghi được bài vào cơ sở dữ liệu." }, 500);
+      added = inserted.length;
+      await fetch(`${base}/rest/v1/seen?on_conflict=link`, { // để robot quét hằng ngày không xử lý lại các bài này
+        method: "POST", headers: { ...H, Prefer: "resolution=ignore-duplicates,return=minimal" },
+        body: JSON.stringify(rows.map((r) => ({ link: r.link, source_id }))),
+      });
     }
-    return json({ ok: true, job_id: jobId });
+    const existing = rows.length - added;
+
+    // 6) Ghi nhật ký để trang quản trị hiện trong "Lấy bài cũ gần đây"
+    const parts = [`đọc được ${all.length} bài, lấy ${top.length}`, `thêm ${added}`];
+    if (existing) parts.push(`${existing} bài đã có sẵn`);
+    if (skippedEmpty) parts.push(`${skippedEmpty} bài thiếu nội dung`);
+    await fetch(`${base}/rest/v1/backfill_jobs`, {
+      method: "POST", headers: { ...H, Prefer: "return=minimal" },
+      body: JSON.stringify([{ source_id, requested: n, status: "done", added, note: parts.join(", "), started_at: now, finished_at: now }]),
+    });
+    return json({ ok: true, read: all.length, requested: n, added, existing, skipped: skippedEmpty });
   } catch (e) {
     return json({ error: "Lỗi: " + (e as Error).message }, 500);
   }

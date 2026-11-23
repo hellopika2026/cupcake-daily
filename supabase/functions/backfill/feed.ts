@@ -1,7 +1,7 @@
 // Đọc RSS/Atom và lấy sẵn NỘI DUNG bài, để robot trên GitHub không phải gọi vào các trang (ví dụ Substack) đang chặn máy chủ GitHub.
 // Chỉ dùng kiểu và hàm thuần của JS nên chạy được cả trên Deno lẫn Node (để thử).
 
-export type FeedItem = { link: string; title: string; published: string | null; text: string; image: string | null };
+export type FeedItem = { link: string; title: string; published: string | null; description: string; text: string; image: string | null };
 
 const ENT: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
 const decode = (s: string) =>
@@ -71,10 +71,35 @@ export function parseFeedItems(xml: string, base: string, maxChars = 12000): Fee
       link,
       title: htmlToText(inner(b, ["title"])).replace(/\s+/g, " "),
       published: dt && !isNaN(+dt) ? dt.toISOString() : null,
+      description: htmlToText(inner(b, isAtom ? ["summary"] : ["description"])).replace(/\s+/g, " "),
       text: htmlToText(html).slice(0, maxChars),
       image: pickImage(b, html, link),
     });
   }
   if (items.some((i) => i.published)) items.sort((a, b) => (b.published || "").localeCompare(a.published || ""));
   return items;
+}
+
+// ---------- Dựng tóm tắt KHÔNG dùng AI ----------
+// Ưu tiên phần mô tả do chính tác giả viết trong feed. Thiếu thì lấy vài câu đầu của bài, bỏ qua lời chào.
+const GREETING = /^(xin\s*ch[àa]o|ch[àa]o|hello|hi|hey|dear|k[íi]nh\s*g[ửu]i|th[âa]n\s*g[ửu]i|ch[úu]c|c[ảa]m\s*[ơo]n|hy\s*v[ọo]ng)/i;
+const clip = (s: string, max: number) => {
+  if (s.length <= max) return s;
+  const cut = s.slice(0, max);
+  const end = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf("! "), cut.lastIndexOf("? "));
+  return (end > max * 0.5 ? cut.slice(0, end + 1) : cut.replace(/\s+\S*$/, "") + "…").trim();
+};
+
+export function buildSummary(it: FeedItem, target = 320): string {
+  const d = it.description.trim();
+  const norm = (x: string) => x.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+  const useful = d.length >= 40 && norm(d) !== norm(it.title) && !norm(it.text).startsWith(norm(d).slice(0, 60));
+  if (useful) return clip(d, 500);
+  const sentences = it.text.split(/\n+|(?<=[.!?…])\s+/).map((x) => x.trim()).filter((x) => x.length >= 25 && !GREETING.test(x));
+  let out = "";
+  for (const sn of sentences) {
+    out += (out ? (/[.!?…:]$/.test(out) ? " " : ". ") : "") + sn;
+    if (out.length >= target) break;
+  }
+  return clip(out, 500);
 }

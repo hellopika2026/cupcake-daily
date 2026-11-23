@@ -43,7 +43,7 @@
 
   <section class="panel">
     <h2>Lấy bài cũ gần đây</h2>
-    <p class="sub" style="font-size:15px">Ở mỗi nguồn, nhập số bài rồi bấm “Lấy bài cũ”. Hệ thống lấy các bài gần nhất của nguồn đó (không cần là bài hôm nay), tóm tắt và đưa lên trang đọc. Thường mất 1–3 phút.</p>
+    <p class="sub" style="font-size:15px">Ở mỗi nguồn, nhập số bài rồi bấm “Lấy bài cũ”. Hệ thống lấy các bài gần nhất của nguồn đó (không cần là bài hôm nay), và đưa lên trang đọc ngay, không phải chờ. Tiêu đề và phần tóm tắt lấy từ chính feed của nguồn (mô tả do tác giả viết), không qua AI nên thường ngắn hơn bài quét hằng ngày.</p>
     <div id="jobs" class="small"></div>
   </section>
 
@@ -180,7 +180,7 @@ async function refresh() {
         const n = parseInt(cnt.value, 10);
         if (!(n >= 1 && n <= 20)) { toast("Nhập số bài từ 1 đến 20"); return; }
         bf.disabled = true;
-        try { await backfill(s.id, n); toast(`Đã gửi yêu cầu lấy ${n} bài, đợi khoảng 1–3 phút`); loadJobs(); }
+        try { const r = await backfill(s.id, n); toast(r.added ? `Đã thêm ${r.added} bài` + (r.existing ? `, ${r.existing} bài đã có sẵn` : "") : "Không có bài mới: các bài này đã có sẵn trên trang"); refresh(); }
         catch (e) { toast(e.message); } finally { bf.disabled = false; } };
       const del = el("button", { class: "btn danger", text: "Xóa", style: "min-height:40px;padding:0 16px" });
       del.onclick = async () => { if (!confirm(`Xóa nguồn “${s.name}” và các bài của nguồn này?`)) return;

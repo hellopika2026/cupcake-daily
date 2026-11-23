@@ -198,7 +198,7 @@ grant execute on function admin_login(text), admin_list_sources(text),
   admin_delete_source(text,uuid), admin_get_settings(text), admin_set_setting(text,text,jsonb),
   admin_recent_runs(text) to anon, authenticated;
 
--- ---------- Lấy bài cũ theo yêu cầu (nút "Lấy bài cũ" trong trang quản trị) ----------
+-- ---------- Lấy bài cũ (nút "Lấy bài cũ" trong trang quản trị, hàm Edge "backfill", không dùng AI) ----------
 -- Bài lấy thêm được đánh dấu để KHÔNG bị tính vào hạn mức "số bài tối đa mỗi ngày" của lần quét thường.
 alter table articles add column if not exists backfilled boolean not null default false;
 
@@ -213,9 +213,9 @@ create table if not exists backfill_jobs (
   started_at  timestamptz,
   finished_at timestamptz
 );
-alter table backfill_jobs add column if not exists items jsonb;  -- bài đã được hàm "backfill" đọc sẵn (tránh bị Substack chặn máy chủ GitHub)
+alter table backfill_jobs drop column if exists items;  -- cột này từng dùng ở bản cũ (đã bỏ)
 alter table backfill_jobs enable row level security;  -- không có policy: chỉ hàm bên dưới và khóa service_role đụng được
-grant select, insert, update, delete on backfill_jobs to service_role;  -- robot và hàm "backfill" dùng role này
+grant select, insert, update, delete on backfill_jobs to service_role;  -- hàm "backfill" dùng role này
 
 create or replace function admin_backfill_jobs(pw text) returns json
 language plpgsql security definer set search_path = public, extensions as $$
