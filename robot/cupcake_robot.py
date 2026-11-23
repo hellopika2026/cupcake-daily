@@ -340,7 +340,7 @@ def llm_gemini(prompt):
     key = os.environ.get("GEMINI_API_KEY", "")
     if not key:
         raise RuntimeError("Chưa có GEMINI_API_KEY")
-    model = os.environ.get("GEMINI_MODEL", "gemini-flash-latest")
+    model = os.environ.get("GEMINI_MODEL") or "gemini-flash-latest"
     r = requests.post(f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
                       headers={"x-goog-api-key": key, "Content-Type": "application/json"},
                       json={"contents": [{"parts": [{"text": prompt}]}],
