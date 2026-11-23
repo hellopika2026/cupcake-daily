@@ -1,0 +1,80 @@
+// Đọc RSS/Atom và lấy sẵn NỘI DUNG bài, để robot trên GitHub không phải gọi vào các trang (ví dụ Substack) đang chặn máy chủ GitHub.
+// Chỉ dùng kiểu và hàm thuần của JS nên chạy được cả trên Deno lẫn Node (để thử).
+
+export type FeedItem = { link: string; title: string; published: string | null; text: string; image: string | null };
+
+const ENT: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
+const decode = (s: string) =>
+  s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e: string) => {
+    if (e[0] === "#") {
+      const n = e[1].toLowerCase() === "x" ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
+      return Number.isFinite(n) && n > 0 && n < 0x110000 ? String.fromCodePoint(n) : m;
+    }
+    return ENT[e.toLowerCase()] ?? m;
+  });
+
+// Lấy phần ruột của một thẻ. Nếu bọc trong CDATA thì mở ra; nếu bị mã hóa (&lt;p&gt;) thì giải mã để ra HTML thật.
+function inner(block: string, tags: string[]): string {
+  for (const t of tags) {
+    const m = block.match(new RegExp(`<${t}(?:\\s[^>]*)?>([\\s\\S]*?)</${t}>`, "i"));
+    if (!m) continue;
+    const c = m[1].trim();
+    const cd = c.match(/^<!\[CDATA\[([\s\S]*?)\]\]>$/);
+    if (cd) return cd[1];
+    return /&lt;|&#60;/i.test(c) ? decode(c) : c;
+  }
+  return "";
+}
+
+export function htmlToText(html: string): string {
+  return decode(
+    html.replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ")
+      .replace(/<\/(p|div|h[1-6]|li|blockquote|tr)>|<br\s*\/?>/gi, "\n")
+      .replace(/<[^>]+>/g, " "),
+  ).replace(/[ \t ]+/g, " ").replace(/ *\n */g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function pickImage(block: string, html: string, base: string): string | null {
+  const cands = [
+    block.match(/<media:content[^>]+url=["']([^"']+)["']/i)?.[1],
+    block.match(/<media:thumbnail[^>]+url=["']([^"']+)["']/i)?.[1],
+    block.match(/<enclosure[^>]+type=["']image[^"']*["'][^>]*url=["']([^"']+)["']/i)?.[1],
+    block.match(/<enclosure[^>]+url=["']([^"']+)["'][^>]*type=["']image/i)?.[1],
+    html.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1],
+  ];
+  for (const c of cands) {
+    if (!c) continue;
+    try { return new URL(decode(c), base).href; } catch { /* thử ứng viên kế tiếp */ }
+  }
+  return null;
+}
+
+/** Trả về các bài (mới nhất trước) hoặc null nếu không phải RSS/Atom. */
+export function parseFeedItems(xml: string, base: string, maxChars = 12000): FeedItem[] | null {
+  const isAtom = /<feed[\s>]/i.test(xml) && !/<rss[\s>]/i.test(xml);
+  const blocks = xml.match(isAtom ? /<entry[\s>][\s\S]*?<\/entry>/gi : /<item[\s>][\s\S]*?<\/item>/gi) || [];
+  if (!blocks.length) return null;
+  const items: FeedItem[] = [];
+  for (const b of blocks) {
+    let link = "";
+    if (isAtom) {
+      link = (b.match(/<link[^>]+rel=["']alternate["'][^>]*href=["']([^"']+)/i) || b.match(/<link[^>]+href=["']([^"']+)/i) || [])[1] || "";
+    } else {
+      link = decode(inner(b, ["link"])).trim();
+    }
+    link = decode(link).trim();
+    if (!link) continue;
+    const html = inner(b, isAtom ? ["content", "summary"] : ["content:encoded", "description"]);
+    const d = inner(b, ["pubDate", "published", "updated", "dc:date"]);
+    const dt = d ? new Date(decode(d).trim()) : null;
+    items.push({
+      link,
+      title: htmlToText(inner(b, ["title"])).replace(/\s+/g, " "),
+      published: dt && !isNaN(+dt) ? dt.toISOString() : null,
+      text: htmlToText(html).slice(0, maxChars),
+      image: pickImage(b, html, link),
+    });
+  }
+  if (items.some((i) => i.published)) items.sort((a, b) => (b.published || "").localeCompare(a.published || ""));
+  return items;
+}

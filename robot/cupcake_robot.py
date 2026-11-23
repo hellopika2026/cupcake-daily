@@ -255,6 +255,9 @@ def get_entries(src):
 
 # ------------------------------------------------------------------ Lấy nội dung 1 bài
 def fetch_article(entry, want_image):
+    if entry.get("prefetched"):  # nội dung đã có sẵn, không gọi lại vào trang bài
+        return {"title": (entry.get("title") or "").strip(), "text": (entry.get("snippet") or "").strip(),
+                "image": entry.get("image") if want_image else None}
     page = None
     try:
         page = http_get(entry["link"])
@@ -394,7 +397,13 @@ def run_backfill(db, job_id, mode):
         st = {r["key"]: r["value"] for r in db.select("settings")}
         want_image = bool(st.get("fetch_images", True))
 
-        entries, method, _feed = get_entries(s)
+        if job.get("items"):  # hàm "backfill" trên Supabase đã đọc sẵn bài (GitHub bị nhiều trang chặn)
+            entries = [{"link": i["link"], "title": i.get("title") or "", "published": parse_iso(i.get("published")),
+                        "snippet": i.get("text") or "", "image": i.get("image"), "prefetched": True}
+                       for i in job["items"] if i.get("link")]
+            method = "đã đọc sẵn"
+        else:
+            entries, method, _feed = get_entries(s)
         if any(e["published"] for e in entries):  # có ngày thì xếp mới nhất lên đầu; không có ngày thì giữ thứ tự của nguồn
             entries.sort(key=lambda e: e["published"] or dt.datetime.min.replace(tzinfo=dt.timezone.utc), reverse=True)
         top = entries[:count]

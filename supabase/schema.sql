@@ -213,6 +213,7 @@ create table if not exists backfill_jobs (
   started_at  timestamptz,
   finished_at timestamptz
 );
+alter table backfill_jobs add column if not exists items jsonb;  -- bài đã được hàm "backfill" đọc sẵn (tránh bị Substack chặn máy chủ GitHub)
 alter table backfill_jobs enable row level security;  -- không có policy: chỉ hàm bên dưới và khóa service_role đụng được
 grant select, insert, update, delete on backfill_jobs to service_role;  -- robot và hàm "backfill" dùng role này
 

@@ -14,6 +14,18 @@ const CORS = {
 };
 const json = (o: unknown, status = 200) =>
   new Response(JSON.stringify(o), { status, headers: { ...CORS, "Content-Type": "application/json" } });
+import { type FeedItem, parseFeedItems } from "./feed.ts";
+
+const UA = "Mozilla/5.0 (compatible; CupcakeDailyBot/1.0; +personal-reader)";
+async function getText(url: string): Promise<string> {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), 20000);
+  try {
+    const r = await fetch(url, { headers: { "User-Agent": UA, Accept: "*/*" }, signal: ctl.signal, redirect: "follow" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return await r.text();
+  } finally { clearTimeout(t); }
+}
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_COUNT = 20;
 
@@ -45,8 +57,22 @@ Deno.serve(async (req) => {
     const H = { apikey: svc, Authorization: "Bearer " + svc, "Content-Type": "application/json" };
 
     // 3) Nguồn phải tồn tại
-    const src = await (await fetch(`${base}/rest/v1/sources?select=id&id=eq.${source_id}`, { headers: H })).json();
+    const src = await (await fetch(`${base}/rest/v1/sources?select=id,url,feed_url,method&id=eq.${source_id}`, { headers: H })).json();
     if (!Array.isArray(src) || !src.length) return json({ error: "Không tìm thấy nguồn này" }, 404);
+
+    // 3b) Đọc sẵn bài ở đây (Supabase đọc được Substack, còn máy chủ GitHub thì bị chặn 403).
+    //     Robot trên GitHub chỉ việc lấy nội dung đã lưu để tóm tắt. Nguồn không phải RSS thì để robot tự đọc.
+    let items: FeedItem[] | null = null;
+    if (src[0].method === "rss" || src[0].feed_url) {
+      const feedUrl = src[0].feed_url || src[0].url;
+      try {
+        items = parseFeedItems(await getText(feedUrl), feedUrl);
+      } catch (e) {
+        return json({ error: `Không đọc được nguồn này lúc này (${(e as Error).message}). Thử lại sau nhé.` }, 502);
+      }
+      if (!items || !items.length) return json({ error: "Nguồn này không có bài nào để lấy." }, 422);
+      items = items.slice(0, n);
+    }
 
     // 4) Mỗi lúc chỉ 1 lượt (tránh bấm dồn làm tốn lượt AI). Yêu cầu treo quá 30 phút coi như hỏng.
     const since = new Date(Date.now() - 30 * 60 * 1000).toISOString();
@@ -57,7 +83,7 @@ Deno.serve(async (req) => {
     // 5) Ghi yêu cầu
     const ins = await fetch(`${base}/rest/v1/backfill_jobs`, {
       method: "POST", headers: { ...H, Prefer: "return=representation" },
-      body: JSON.stringify([{ source_id, requested: n }]),
+      body: JSON.stringify([{ source_id, requested: n, items }]),
     });
     const rows = await ins.json();
     if (!ins.ok || !rows?.[0]?.id) return json({ error: "Không tạo được yêu cầu. Đã chạy lại file schema.sql chưa?" }, 500);
