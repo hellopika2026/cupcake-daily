@@ -419,6 +419,10 @@ def main():
     sources = db.select("sources", {"select": "*", "active": "eq.true"})
     seen_since = (now - dt.timedelta(days=120)).isoformat()
     seen = {r["link"] for r in db.select("seen", {"select": "link", "created_at": "gte." + seen_since})}
+    try:  # bài bạn đã xóa thì không lấy lại
+        seen |= {r["link"] for r in db.select("deleted_articles", {"select": "link"})}
+    except RuntimeError:  # chưa chạy schema.sql mới (chưa có bảng deleted_articles)
+        pass
     try:  # bài "lấy bài cũ" không tính vào hạn mức mỗi ngày
         already_today = len(db.select("articles", {"select": "id", "created_at": "gte." + today0.isoformat(),
                                                    "backfilled": "eq.false"}))

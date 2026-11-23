@@ -65,7 +65,11 @@ Deno.serve(async (req) => {
       return json({ error: `Không đọc được nguồn này lúc này (${(e as Error).message}). Thử lại sau nhé.` }, 502);
     }
     if (!all || !all.length) return json({ error: "Nguồn này không có bài nào để lấy." }, 422);
-    const top = all.slice(0, n);
+    // Bỏ qua các bài bạn đã xóa (không tính vào N)
+    const gone = await (await fetch(`${base}/rest/v1/deleted_articles?select=link&limit=10000`, { headers: H })).json();
+    const goneSet = new Set<string>(Array.isArray(gone) ? gone.map((d: { link: string }) => d.link) : []);
+    const top = all.filter((it) => !goneSet.has(it.link)).slice(0, n);
+    if (!top.length) return json({ ok: true, read: all.length, requested: n, added: 0, existing: 0, skipped: 0 });
 
     // 5) Dựng bài (không AI) và ghi vào database
     const set = await (await fetch(`${base}/rest/v1/settings?select=value&key=eq.fetch_images`, { headers: H })).json();

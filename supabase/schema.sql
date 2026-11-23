@@ -228,6 +228,46 @@ begin
 end $$;
 grant execute on function admin_backfill_jobs(text) to anon, authenticated;
 
+-- ---------- Xóa bài ----------
+-- Sổ ghi link các bài đã xóa: robot quét hằng ngày và nút "Lấy bài cũ" đều bỏ qua các link này, nên bài đã xóa không tự quay lại.
+create table if not exists deleted_articles (
+  link       text primary key,
+  deleted_at timestamptz not null default now()
+);
+alter table deleted_articles enable row level security;  -- không có policy: chỉ hàm bên dưới và service_role đụng được
+grant select, insert, update, delete on deleted_articles to service_role;
+
+create or replace function admin_list_articles(pw text, p_source uuid default null, p_q text default '', p_limit int default 20, p_offset int default 0)
+returns json language plpgsql security definer set search_path = public, extensions as $$
+declare total int; items json;
+begin
+  if not _check_pw(pw) then raise exception 'Sai mật khẩu'; end if;
+  select count(*) into total from articles a
+    where (p_source is null or a.source_id = p_source)
+      and (coalesce(p_q,'') = '' or a.title_vi ilike '%' || p_q || '%');
+  select coalesce(json_agg(t), '[]'::json) into items from (
+    select a.id, a.title_vi, a.link, a.created_at, a.backfilled, s.name as source_name
+    from articles a left join sources s on s.id = a.source_id
+    where (p_source is null or a.source_id = p_source)
+      and (coalesce(p_q,'') = '' or a.title_vi ilike '%' || p_q || '%')
+    order by a.created_at desc
+    limit greatest(1, least(coalesce(p_limit,20), 100)) offset greatest(0, coalesce(p_offset,0))) t;
+  return json_build_object('total', total, 'items', items);
+end $$;
+
+create or replace function admin_delete_article(pw text, p_id uuid) returns boolean
+language plpgsql security definer set search_path = public, extensions as $$
+declare l text;
+begin
+  if not _check_pw(pw) then raise exception 'Sai mật khẩu'; end if;
+  delete from articles where id = p_id returning link into l;
+  if l is null then return false; end if;
+  insert into deleted_articles(link) values (l) on conflict (link) do nothing;
+  insert into seen(link) values (l) on conflict (link) do nothing;
+  return true;
+end $$;
+grant execute on function admin_list_articles(text, uuid, text, int, int), admin_delete_article(text, uuid) to anon, authenticated;
+
 -- =====================================================================
 -- ĐẶT MẬT KHẨU QUẢN TRỊ: sửa chữ ĐỔI_MẬT_KHẨU_Ở_ĐÂY thành mật khẩu của bạn rồi chạy MỘT LẦN.
 -- (Đổi mật khẩu sau này: chạy lại đúng dòng này với mật khẩu mới.)
