@@ -163,7 +163,6 @@ function floaters() {
   const f = $("floaters"); f.replaceChildren();
   const today = st.arts.filter(a => vnDay(new Date(a.created_at)) === vnDay(new Date())).slice(0, 2);
   today.forEach(a => f.append(el("div", {}, [el("span", { class: "d", style: "background:#7CFF6B" }), el("span", { class: "lb", text: "MỚI" }), el("span", { class: "tt", text: a.title_vi })])));
-  if (st.scanning) f.append(el("div", {}, [el("span", { class: "d", style: "background:#FFC94A" }), el("span", { class: "lb", text: "ĐANG QUÉT" }), el("span", { class: "tt", text: "Robot đang tìm bài mới" })]));
   placeFloaters();
 }
 addEventListener("resize", placeFloaters);
