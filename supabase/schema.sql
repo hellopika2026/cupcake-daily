@@ -214,6 +214,7 @@ create table if not exists backfill_jobs (
   finished_at timestamptz
 );
 alter table backfill_jobs enable row level security;  -- không có policy: chỉ hàm bên dưới và khóa service_role đụng được
+grant select, insert, update, delete on backfill_jobs to service_role;  -- robot và hàm "backfill" dùng role này
 
 create or replace function admin_backfill_jobs(pw text) returns json
 language plpgsql security definer set search_path = public, extensions as $$
