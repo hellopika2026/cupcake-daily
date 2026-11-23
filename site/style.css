@@ -83,6 +83,10 @@ main{max-width:1240px;margin:0 auto;padding:36px 40px 72px;display:flex;flex-dir
 .small{font-size:13px;color:var(--mute)}
 .empty{padding:48px 20px;text-align:center;color:var(--mute);background:#fff;border:1.5px dashed var(--ink);border-radius:14px}
 
+#musicBtn{position:fixed;right:16px;bottom:16px;z-index:20;width:48px;height:48px;border-radius:10px;border:1.5px solid var(--ink);background:var(--org);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;box-shadow:0 4px 0 var(--ink)}
+#musicBtn[hidden]{display:none}
+#musicBtn:active{transform:translateY(2px);box-shadow:0 2px 0 var(--ink)}
+
 /* ---------- Quản trị ---------- */
 .hdr{background:#fff;border-bottom:1.5px solid var(--ink)}
 .hdr-in{max-width:1240px;margin:0 auto;padding:14px 40px;display:flex;align-items:center;gap:12px 20px;flex-wrap:wrap}

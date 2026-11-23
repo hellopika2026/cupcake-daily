@@ -49,6 +49,8 @@
     <span class="small">Bài do hệ thống tự thu thập từ các nguồn bạn chọn. Bài không có ảnh vẫn hiện thành thẻ chữ.</span>
   </div>
 </main>
+<div id="ytHolder" aria-hidden="true" style="position:fixed;left:0;bottom:0;width:2px;height:2px;overflow:hidden;opacity:0;pointer-events:none"><div id="ytp"></div></div>
+<button type="button" id="musicBtn" hidden aria-pressed="false" aria-label="Bật hoặc tắt tiếng nhạc nền" title="Nhạc nền"></button>
 <script src="config.js"></script>
 <script>
 const C = window.CUPCAKE, PAGE = 120;
@@ -170,6 +172,56 @@ $("toTop").onclick = e => { e.preventDefault(); scrollTo({ top: 0, behavior: "sm
 $("readNow").onclick = e => { e.preventDefault(); $("list").scrollIntoView({ behavior: "smooth", block: "start" }); };
 $("mSearch").onclick = () => { $("q").scrollIntoView({ behavior: "smooth", block: "center" }); setTimeout(() => $("q").focus(), 350); };
 $("q").oninput = e => { st.q = e.target.value; render(); };
+// ---- Nhạc nền YouTube (link đặt trong Quản trị > Cài đặt), phát lặp lại ----
+const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch {} } };
+function ytParse(u) {
+  try { const x = new URL(u), h = x.hostname.replace(/^www\.|^m\./, ""), ID = /^[\w-]{11}$/;
+    let v = null; const list = x.searchParams.get("list");
+    if (h === "youtu.be") v = x.pathname.slice(1).split("/")[0];
+    else if (h === "youtube.com" || h === "music.youtube.com") v = x.searchParams.get("v") || (/^\/(embed|shorts|live)\//.test(x.pathname) ? x.pathname.split("/")[2] : null);
+    else return null;
+    if (v && !ID.test(v)) v = null;
+    const L = list && /^[\w-]{10,}$/.test(list) ? list : null;
+    return (v || L) ? { v, list: L } : null;
+  } catch { return null; }
+}
+const ICON_ON = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg>';
+const ICON_OFF = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="m16 9 5 6M21 9l-5 6"/></svg>';
+let yt = null, userMuted = store.get("cupcakeMuted") === "1", gestured = false;
+function setBtn(playingWithSound) {
+  const b = $("musicBtn"); b.innerHTML = playingWithSound ? ICON_ON : ICON_OFF;
+  b.setAttribute("aria-pressed", playingWithSound); b.title = playingWithSound ? "Tắt tiếng nhạc nền" : "Bật tiếng nhạc nền";
+}
+function startMusic(url) {
+  const m = ytParse(url); if (!m) return;
+  $("musicBtn").hidden = false; setBtn(false);
+  window.onYouTubeIframeAPIReady = () => {
+    const vars = { autoplay: 1, controls: 0, loop: 1, playsinline: 1, rel: 0, modestbranding: 1, origin: location.origin };
+    const cfg = { width: 2, height: 2, playerVars: vars, events: {
+      onReady: e => { yt = e.target; yt.setVolume(60); userMuted ? yt.mute() : yt.unMute(); yt.playVideo();
+        setTimeout(() => { if (yt.getPlayerState() !== 1) { yt.mute(); yt.playVideo(); } refreshBtn(); }, 1500); },
+      onStateChange: e => { if (e.data === 0 && !m.list) { yt.seekTo(0); yt.playVideo(); } refreshBtn(); } } };
+    if (m.list && !m.v) { vars.listType = "playlist"; vars.list = m.list; }
+    else { cfg.videoId = m.v; if (m.list) vars.list = m.list; else vars.playlist = m.v; }
+    new YT.Player("ytp", cfg);
+  };
+  const t = document.createElement("script"); t.src = "https://www.youtube.com/iframe_api"; document.head.append(t);
+}
+function refreshBtn() { if (yt && yt.isMuted) setBtn(yt.getPlayerState() === 1 && !yt.isMuted()); }
+// Trình duyệt chỉ cho phát có tiếng sau khi người xem chạm vào trang: lần chạm đầu tiên sẽ bật tiếng
+function firstGesture() {
+  if (gestured) return; gestured = true;
+  if (yt && !userMuted) { yt.unMute(); yt.setVolume(60); yt.playVideo(); setTimeout(refreshBtn, 300); }
+}
+["pointerdown", "keydown", "touchstart"].forEach(ev => addEventListener(ev, firstGesture, { once: true, passive: true }));
+$("musicBtn").onclick = e => { e.stopPropagation(); if (!yt) return;
+  gestured = true;
+  if (yt.isMuted() || yt.getPlayerState() !== 1) { userMuted = false; store.set("cupcakeMuted", "0"); yt.unMute(); yt.setVolume(60); yt.playVideo(); }
+  else { userMuted = true; store.set("cupcakeMuted", "1"); yt.mute(); }
+  setTimeout(refreshBtn, 200); };
+fetch(C.url + "/rest/v1/rpc/public_music", { method: "POST", headers: { ...H, "Content-Type": "application/json" }, body: "{}" })
+  .then(r => r.ok ? r.json() : "").then(u => { if (u && typeof u === "string") startMusic(u); }).catch(() => {});
+
 init();
 </script>
 </body>
