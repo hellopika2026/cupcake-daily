@@ -7,7 +7,7 @@
 <title>Cupcake Daily</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&family=Space+Grotesk:wght@500;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23111' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12h14l-1.6 8H6.6z'/%3E%3Cpath d='M6 12a6 5 0 0 1 12 0'/%3E%3Ccircle cx='12' cy='4.6' r='1.2'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -42,7 +42,7 @@
     <div class="pills" id="ranges"></div>
   </section>
   <section class="hot" id="hot" hidden>
-    <div class="day-h"><h2>Chủ đề nóng</h2><span id="hotCount"></span></div>
+    <div class="day-h"><h2><span class="hot-fire" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="#fff" stroke="#111" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c.5 3-1.5 4.5-3 6.5S6.5 13 7.5 16c.8 2.4 2.6 4 4.5 4 3 0 5.5-2.2 5.5-5.5 0-2.4-1.2-3.8-2.2-5-.6 1-1.4 1.6-2.3 1.8.4-2.6-.2-5.6-1-8.3z"/></svg></span>Chủ đề nóng</h2><span id="hotCount"></span></div>
     <div class="hotlist" id="hotList"></div>
   </section>
   <div class="pills cats" id="cats" style="margin:0 0 18px"></div>
@@ -183,12 +183,12 @@ $("delForm").onsubmit = async e => {
   } catch { $("delErr").textContent = "Không kết nối được. Thử lại."; $("delOk").disabled = false; }
 };
 function card(a, num) {
-  const cat = CATS[a.category], color = cat ? cat[1] : "#3B5BFF";
+  const cat = CATS[a.category], color = cat ? cat[1] : "#3B5BFF", n2 = String(num).padStart(2, "0");
   const link = safeUrl(a.link), img = safeUrl(a.image_url);
-  const tint = "t" + (num % 2);
-  const c = el("article", { class: "card" + (img ? "" : " big " + tint) });
+  const c = el("article", { class: "card" + (img ? "" : " big"), style: "--cc:" + color, "data-n": n2 });
+  c.append(el("div", { class: "cstrip" }));
   if (img) { const im = el("img", { src: img, alt: "", loading: "lazy", referrerpolicy: "no-referrer" });
-    im.onerror = () => { im.remove(); c.classList.add("big", tint); }; c.append(im); }
+    im.onerror = () => { im.remove(); c.classList.add("big"); }; c.append(im); }
   const x = el("button", { class: "xdel", type: "button", title: "Xóa bài", "aria-label": "Xóa bài: " + a.title_vi });
   x.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 4h4M6 7l.8 12h10.4L18 7"/></svg>';
   x.onclick = () => askDelete(a, c);
@@ -196,13 +196,11 @@ function card(a, num) {
   sv.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" fill-opacity="0" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4h10v16l-5-3.6L7 20z"/></svg>';
   sv.onclick = () => toggleSave(a, sv);
   const inSaved = st.range === "saved";
-  const chipBg = color + "33";
   c.append(el("div", { class: "bd" }, [
     el("div", { class: "meta" }, [
-      el("span", { class: "num", style: "background:" + chipBg, text: String(num).padStart(2, "0") }),
-      cat ? el("span", { class: "catchip", style: "background:" + chipBg, text: cat[0] }) : null,
+      cat ? el("span", { class: "catchip", text: cat[0] }) : null,
       el("span", { class: "srcn", text: (a.source_name || "").replace(/\s*[(（](RSS|trang web)[)）]\s*$/i, "") }),
-      el("span", { text: vnTime(when(a)) })]),
+      el("span", { class: "mt", text: n2 + " · " + vnTime(when(a)) })]),
     el("h3", { text: a.title_vi }), el("p", { text: a.summary_vi }),
     a.reason_vi ? el("p", { class: "why" }, [el("b", { text: "Vì sao đáng đọc: " }), document.createTextNode(a.reason_vi)]) : null,
     (a.tags && a.tags.length) ? el("div", { class: "tags" }, a.tags.map(t => el("span", { class: "tag", text: "#" + t }))) : null,
@@ -216,11 +214,24 @@ function hotTopics() {
   const box = $("hot"), L = $("hotList"); L.replaceChildren();
   if (!st.hot.length || st.range === "saved") { box.hidden = true; return; }
   box.hidden = false; $("hotCount").textContent = "[ " + st.hot.length + " chủ đề ]";
-  st.hot.forEach(t => { const link = safeUrl(t.link);
-    const body = [el("span", { class: "hrank", text: String(t.rank).padStart(2, "0") }),
-      el("span", { class: "htitle", text: t.title_vi }),
-      el("span", { class: "hmeta", text: (t.source_count ? t.source_count + " nguồn đưa tin" : "") + (t.source_name ? (t.source_count ? " · " : "") + t.source_name : "") })];
-    L.append(link ? el("a", { class: "hitem", href: link, target: "_blank", rel: "noopener noreferrer" }, body) : el("div", { class: "hitem" }, body)); });
+  const ARROW = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>';
+  const SIG = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12a7 7 0 0 1 7-7M5 12a7 7 0 0 0 7 7M19 12a7 7 0 0 0-7-7M19 12a7 7 0 0 1-7 7"/><circle cx="12" cy="12" r="1.6"/></svg>';
+  const item = (t, i) => {
+    const link = safeUrl(t.link), top = i < 3, rank = String(t.rank ?? i + 1).padStart(2, "0");
+    const meta = el("div", { class: "hmeta" }, [
+      t.source_count ? (() => { const c = el("span", { class: "hcnt" }); c.insertAdjacentHTML("afterbegin", SIG); c.append(t.source_count + " nguồn"); return c; })() : null,
+      t.source_name ? el("span", { class: "hsrc", text: t.source_name }) : null]);
+    const arr = el("span", { class: "harr" }); arr.innerHTML = ARROW;
+    const cls = "hitem " + (top ? "hp r" + (i + 1) : "row");
+    const kids = top
+      ? [el("div", { class: "hhead" }, [el("span", { class: "hrank", text: rank }), link ? arr : null]),
+         el("div", { class: "hbody" }, [el("span", { class: "htitle", text: t.title_vi }), meta])]
+      : [el("span", { class: "hrank", text: rank }), el("div", { class: "hbody" }, [el("span", { class: "htitle", text: t.title_vi }), meta]), link ? arr : null];
+    return link ? el("a", { class: cls, href: link, target: "_blank", rel: "noopener noreferrer" }, kids) : el("div", { class: cls }, kids);
+  };
+  const pod = el("div", { class: "hpod", style: "--n:" + Math.min(3, st.hot.length) }, st.hot.slice(0, 3).map((t, i) => item(t, i)));
+  L.append(pod);
+  if (st.hot.length > 3) L.append(el("div", { class: "hrest" }, st.hot.slice(3).map((t, i) => item(t, i + 3))));
 }
 
 // ---- Thẻ kính nổi trên laptop (chỉ máy tính) ----
