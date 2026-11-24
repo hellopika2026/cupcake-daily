@@ -294,3 +294,6 @@ grant select, insert, update, delete on articles, runs, deleted_articles to serv
 
 -- Đã thử lấy ảnh (og:image) cho bài này chưa: mỗi bài chỉ thử một lần
 alter table articles add column if not exists image_checked boolean not null default false;
+
+-- Tự dọn bài cũ: mỗi ngày lúc 03:00 giờ Việt Nam (20:00 UTC) xóa bài đăng cách đây hơn 6 tháng (pg_cron, đặt trực tiếp trên Supabase)
+-- select cron.schedule('cleanup-old-articles', '0 20 * * *', $job$ delete from public.articles where published_at < now() - interval '6 months' $job$);
