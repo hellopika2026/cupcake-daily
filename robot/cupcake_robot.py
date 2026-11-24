@@ -317,7 +317,7 @@ def build_summary(title, desc, text, target=320):
     out = ""
     for sn in re.split(r"[\r\n]+|(?<=[.!?…])\s+", text or ""):
         sn = sn.strip()
-        if len(sn) < 25 or GREETING.search(sn) or (sn.endswith(",") and len(sn) < 80):  # dòng chào đầu thư
+        if len(sn) < 25 or GREETING.search(sn) or (sn.endswith(",") and len(sn) < 80) or sn.lower().startswith(("http://", "https://")):  # dòng chào đầu thư, dòng chỉ có link
             continue
         out += (" " if re.search(r"[.!?…:]$", out) else ". " if out else "") + sn
         if len(out) >= target:

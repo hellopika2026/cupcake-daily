@@ -68,14 +68,15 @@ export function parseFeedItems(xml: string, base: string, maxChars = 12000): Fee
     }
     link = decode(link).trim();
     if (!link) continue;
-    const html = inner(b, isAtom ? ["content", "summary"] : ["content:encoded", "description"]);
+    const mediaDesc = inner(b, ["media:description"]); // YouTube để mô tả video ở đây
+    const html = inner(b, isAtom ? ["content", "summary"] : ["content:encoded", "description"]) || mediaDesc;
     const d = inner(b, ["pubDate", "published", "updated", "dc:date"]);
     const dt = d ? new Date(decode(d).trim()) : null;
     items.push({
       link,
       title: htmlToText(inner(b, ["title"])).replace(/\s+/g, " "),
       published: dt && !isNaN(+dt) ? dt.toISOString() : null,
-      description: htmlToText(inner(b, isAtom ? ["summary"] : ["description"])).replace(/\s+/g, " "),
+      description: htmlToText(inner(b, isAtom ? ["summary"] : ["description"]) || mediaDesc).replace(/\s+/g, " "),
       text: htmlToText(html).slice(0, maxChars),
       image: pickImage(b, html, link),
     });
@@ -99,7 +100,7 @@ export function buildSummary(it: FeedItem, target = 320): string {
   const norm = (x: string) => x.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
   const useful = d.length >= 40 && norm(d) !== norm(it.title) && !norm(it.text).startsWith(norm(d).slice(0, 60));
   if (useful) return clip(d, 500);
-  const sentences = it.text.split(/\n+|(?<=[.!?…])\s+/).map((x) => x.trim()).filter((x) => x.length >= 25 && !GREETING.test(x));
+  const sentences = it.text.split(/\n+|(?<=[.!?…])\s+/).map((x) => x.trim()).filter((x) => x.length >= 25 && !GREETING.test(x) && !/^https?:\/\//i.test(x));
   let out = "";
   for (const sn of sentences) {
     out += (out ? (/[.!?…:]$/.test(out) ? " " : ". ") : "") + sn;

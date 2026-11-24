@@ -34,7 +34,7 @@ Deno.serve(async (req) => {
     const anon = Deno.env.get("SUPABASE_ANON_KEY")!;
     const svc = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    // 1) Mật khẩu admin (dùng chính hàm admin_login, có giới hạn thử sai)
+    // 1) Mật khẩu admin (dùng chính hàm admin_login)
     const auth = await fetch(`${base}/rest/v1/rpc/admin_login`, {
       method: "POST",
       headers: { apikey: anon, Authorization: "Bearer " + anon, "Content-Type": "application/json" },
