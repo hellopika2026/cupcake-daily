@@ -18,7 +18,7 @@ jobs:
       name: github-pages
       url: ${{ steps.dep.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Điền cấu hình Supabase vào web
         env:
           SB_URL: ${{ vars.SUPABASE_URL }}
@@ -27,9 +27,9 @@ jobs:
           if [ -n "$SB_URL" ] && [ -n "$SB_ANON" ]; then
             printf 'window.CUPCAKE = { url: "%s", anonKey: "%s" };\n' "$SB_URL" "$SB_ANON" > site/config.js
           fi
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v4
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: site
       - id: dep
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
