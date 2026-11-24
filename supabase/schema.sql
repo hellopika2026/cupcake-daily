@@ -70,11 +70,6 @@ create table if not exists admin_config (
   password_hash text not null
 );
 
-create table if not exists admin_attempts (
-  id         bigserial primary key,
-  at         timestamptz not null default now()
-);
-
 -- ---------- Quyền đọc công khai ----------
 alter table sources       enable row level security;
 alter table articles      enable row level security;
@@ -82,7 +77,6 @@ alter table seen          enable row level security;
 alter table settings      enable row level security;
 alter table runs          enable row level security;
 alter table admin_config  enable row level security;
-alter table admin_attempts enable row level security;
 
 -- Ai có link web đều đọc được bài (chỉ đọc)
 drop policy if exists "public read articles" on articles;
@@ -113,19 +107,11 @@ grant execute on function public_music() to anon, authenticated;
 -- ---------- Hàm quản trị: mọi hàm đều kiểm mật khẩu ở phía máy chủ ----------
 create or replace function _check_pw(pw text) returns boolean
 language plpgsql security definer set search_path = public, extensions as $$
-declare ok boolean; recent int;
+declare ok boolean;
 begin
-  delete from admin_attempts where at < now() - interval '1 day';
-  select count(*) into recent from admin_attempts where at > now() - interval '10 minutes';
-  if recent >= 8 then
-    raise exception 'Nhập sai quá nhiều lần, thử lại sau 10 phút.';
-  end if;
+  -- Không giới hạn số lần nhập sai (chủ dự án chọn bỏ), nên hãy đặt mật khẩu quản trị đủ dài, khó đoán.
   select (password_hash = crypt(pw, password_hash)) into ok from admin_config where id = 1;
-  if ok is not true then
-    insert into admin_attempts default values;
-    return false;
-  end if;
-  return true;
+  return ok is true;
 end $$;
 revoke all on function _check_pw(text) from public, anon, authenticated;
 
@@ -267,6 +253,9 @@ begin
   return true;
 end $$;
 grant execute on function admin_list_articles(text, uuid, text, int, int), admin_delete_article(text, uuid) to anon, authenticated;
+
+-- Dọn bảng đếm lần nhập sai cũ (không còn dùng)
+drop table if exists admin_attempts;
 
 -- =====================================================================
 -- ĐẶT MẬT KHẨU QUẢN TRỊ: sửa chữ ĐỔI_MẬT_KHẨU_Ở_ĐÂY thành mật khẩu của bạn rồi chạy MỘT LẦN.
