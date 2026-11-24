@@ -134,8 +134,11 @@ main .panel+.panel{margin-top:0}
  .readnow{padding:0 20px}.upd{padding:0 14px;font-size:12px}
  .floaters{display:none}
  main{padding:22px 16px 48px;gap:22px}
- .search{max-width:none;flex-basis:100%}
- .toolbar{flex-direction:column;flex-wrap:nowrap;align-items:stretch;gap:10px;min-width:0}
+ .search{max-width:none;flex:1 1 0}
+ .toolbar{flex-direction:row;flex-wrap:nowrap;align-items:center;gap:10px;min-width:0}
+ #ranges .pill{padding:0;width:46px;min-height:46px;justify-content:center;position:relative}
+ #ranges .pill .lbl{display:none}
+ #ranges .pill .cnt{position:absolute;top:-6px;right:-6px;min-width:18px;height:18px;padding:0 5px;border-radius:99px;background:#FF4F1F;color:#fff;font-size:11px;line-height:18px;text-align:center;font-weight:700}
  .pills{flex-wrap:nowrap;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
  .pills::-webkit-scrollbar{display:none}
  .pills .pill{flex:none}
@@ -285,3 +288,9 @@ a.hitem:hover .harr{background:#fff;color:#111}
 
 /* Hero (phần đầu trang): giữ phông gốc */
 .scene{--mono:"JetBrains Mono",ui-monospace,monospace;--disp:"Space Grotesk","Be Vietnam Pro",sans-serif;font-family:"Be Vietnam Pro",system-ui,-apple-system,"Segoe UI",sans-serif}
+
+@media(min-width:761px){
+ #ranges .pill .cnt{margin-left:2px;font-size:12px;opacity:.8}
+ #ranges .pill .cnt::before{content:"("}
+ #ranges .pill .cnt::after{content:")"}
+}

@@ -89,7 +89,9 @@ const SK = "cupcakeSaved";
 const saved = { list: (() => { try { const v = JSON.parse(localStorage.getItem(SK) || "[]"); return Array.isArray(v) ? v : []; } catch { return []; } })() };
 const persistSaved = () => { try { localStorage.setItem(SK, JSON.stringify(saved.list)); return true; } catch { return false; } };
 const isSaved = id => saved.list.some(x => x.id === id);
+const BM = '<svg class="bm" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4h10v16l-5-3.6L7 20z"/></svg>';
 function savedLabel() { return "Đã lưu" + (saved.list.length ? ` (${saved.list.length})` : ""); }
+function fillSaved(b) { b.innerHTML = BM + '<span class="lbl">Đã lưu</span>' + (saved.list.length ? `<span class="cnt">${saved.list.length}</span>` : ""); b.setAttribute("aria-label", savedLabel()); b.title = savedLabel(); }
 function toggleSave(a, btn) {
   const i = saved.list.findIndex(x => x.id === a.id);
   if (i >= 0) saved.list.splice(i, 1);
@@ -99,7 +101,7 @@ function toggleSave(a, btn) {
   const on = isSaved(a.id);
   if (st.range === "saved") { render(); return; }
   btn.classList.toggle("on", on); btn.setAttribute("aria-pressed", on); btn.title = on ? "Bỏ lưu bài" : "Lưu bài";
-  const p = $("savedPill"); if (p) p.textContent = savedLabel();
+  const p = $("savedPill"); if (p) fillSaved(p);
 }
 async function api(path) { const r = await fetch(C.url + "/rest/v1/" + path, { headers: H }); if (!r.ok) throw new Error(r.status); return r.json(); }
 
@@ -139,8 +141,8 @@ function render() {
   // bộ lọc thời gian
   const rg = $("ranges"); rg.replaceChildren();
   [["saved", savedLabel()]].forEach(([k, t]) => {
-    const b = el("button", { class: "pill solid", type: "button", "aria-pressed": st.range === k, text: t });
-    if (k === "saved") b.id = "savedPill";
+    const b = el("button", { class: "pill solid", type: "button", "aria-pressed": st.range === k });
+    if (k === "saved") { b.id = "savedPill"; fillSaved(b); }
     b.onclick = () => { st.range = st.range === k ? "all" : k; render(); }; rg.append(b); });
   // bộ lọc danh mục
   const cg = $("cats"); cg.replaceChildren();
