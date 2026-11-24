@@ -173,3 +173,17 @@ main .panel+.panel{margin-top:0}
 .mnav button{border-radius:99px;background:rgba(255,255,255,.14);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
 
 [hidden]{display:none!important}
+
+/* ---- Tin từ API: chủ đề nóng, nhãn danh mục, dòng "Vì sao đáng đọc" ---- */
+.hot{margin:0 0 26px}
+.hotlist{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+.hitem{display:flex;flex-direction:column;gap:6px;padding:14px 16px;border:1px solid rgba(17,17,17,.12);border-radius:14px;background:#fff;color:#111;text-decoration:none}
+a.hitem:hover{border-color:#111}
+.hrank{font-family:"JetBrains Mono",monospace;font-weight:700;font-size:13px;color:#7C4DFF}
+.htitle{font-weight:600;line-height:1.35}
+.hmeta{font-size:12.5px;opacity:.65}
+.catchip{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:600}
+.why{font-size:14px;line-height:1.45;opacity:.82;margin-top:8px}
+.why b{font-weight:600}
+.cats{display:flex;flex-wrap:wrap;gap:8px}
+.cats .pill[aria-pressed=true]{background:var(--ink);color:#fff}

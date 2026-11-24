@@ -263,3 +263,31 @@ drop table if exists admin_attempts;
 -- =====================================================================
 -- insert into admin_config(id, password_hash) values (1, crypt('ĐỔI_MẬT_KHẨU_Ở_ĐÂY', gen_salt('bf')))
 -- on conflict (id) do update set password_hash = excluded.password_hash;
+
+-- =====================================================================
+-- TIN TỪ API (aihot.news) - hàm Edge "update-news" lấy tin tiếng Trung, dịch sang tiếng Việt bằng Gemini rồi ghi vào đây
+-- =====================================================================
+alter table articles add column if not exists external_id text;   -- id bài bên API
+alter table articles add column if not exists category    text;   -- industry | ai-products | paper | tip | ai-models | opinion
+alter table articles add column if not exists reason_vi   text;   -- "Vì sao đáng đọc"
+alter table articles add column if not exists source_name text;   -- tên nguồn (bài không còn gắn với bảng sources)
+alter table articles add column if not exists score       int;
+create index if not exists articles_external_idx on articles (external_id);
+
+create table if not exists hot_topics (
+  rank         int primary key,
+  external_id  text,
+  title_vi     text not null,
+  source_name  text,
+  link         text,
+  source_count int,
+  signal_count int,
+  latest_at    timestamptz,
+  updated_at   timestamptz not null default now()
+);
+alter table hot_topics enable row level security;
+drop policy if exists "public read hot_topics" on hot_topics;
+create policy "public read hot_topics" on hot_topics for select to anon, authenticated using (true);
+grant select on hot_topics to anon, authenticated;
+grant select, insert, update, delete on hot_topics to service_role;
+grant select, insert, update, delete on articles, runs, deleted_articles to service_role;

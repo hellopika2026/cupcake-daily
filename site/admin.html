@@ -26,6 +26,13 @@
 </div>
 
 <main id="app" hidden>
+  <section class="panel">
+    <h2>Cập nhật tin</h2>
+    <p class="sub" style="font-size:15px">Hệ thống tự cập nhật 3 lần mỗi ngày (07:00, 12:00, 19:00). Bấm nút này để lấy tin mới ngay: lấy từ API, dịch sang tiếng Việt rồi đưa lên trang đọc. Mất khoảng 30 đến 90 giây.</p>
+    <div class="row"><button class="btn primary" id="updNews">Cập nhật tin ngay</button></div>
+    <div class="small" id="updOut" style="margin-top:8px"></div>
+  </section>
+
   <!-- ĐÃ ẨN (tạm không lấy bài từ RSS/YouTube). Bỏ thuộc tính hidden để dùng lại. -->
   <section class="panel" hidden>
     <h2>Thêm nguồn mới</h2>
@@ -102,6 +109,17 @@ async function rpc(name, args = {}) {
   if (!r.ok) throw new Error((j && j.message) || "Lỗi " + r.status);
   return j;
 }
+$("updNews").onclick = async () => {
+  const b = $("updNews"), o = $("updOut"); b.disabled = true; o.textContent = "Đang lấy tin và dịch, vui lòng chờ…";
+  try {
+    const r = await fetch(`${C.url}/functions/v1/update-news`, { method: "POST", headers: H, body: JSON.stringify({ password: PW }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || "Lỗi " + r.status);
+    o.textContent = `Xong: thêm ${j.added} bài mới (đã quét ${j.found} bài), ${j.hot} chủ đề nóng` + (j.skipped ? `, ${j.skipped} bài dịch lỗi bị bỏ qua` : "") + ".";
+    toast(j.added ? `Đã thêm ${j.added} bài` : "Chưa có bài mới");
+  } catch (e) { o.textContent = "Không cập nhật được: " + e.message; }
+  b.disabled = false;
+};
 async function checkLink(url) {
   const r = await fetch(`${C.url}/functions/v1/check-link`, { method: "POST", headers: H, body: JSON.stringify({ password: PW, url }) });
   const j = await r.json().catch(() => ({})); if (r.status === 401) throw new Error("Sai mật khẩu"); return j;

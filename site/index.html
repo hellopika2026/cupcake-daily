@@ -41,11 +41,16 @@
       <input id="q" type="search" placeholder="Tìm bài viết" aria-label="Tìm bài viết"></div>
     <div class="pills" id="ranges"></div>
   </section>
+  <section class="hot" id="hot" hidden>
+    <div class="day-h"><h2>Chủ đề nóng</h2><span id="hotCount"></span></div>
+    <div class="hotlist" id="hotList"></div>
+  </section>
+  <div class="pills cats" id="cats" style="margin:0 0 18px"></div>
   <div id="list"></div>
   <div class="more">
     <button class="btn" id="more" hidden>XEM CÁC NGÀY TRƯỚC ↓</button>
     <span class="tagline">Cupcake Daily · Tờ báo nhỏ của Cupcake, mỗi sáng một lần</span>
-    <span class="small">Bài do hệ thống tự thu thập từ các nguồn bạn chọn. Bài không có ảnh vẫn hiện thành thẻ chữ.</span>
+    <span class="small">Tin AI được hệ thống thu thập và dịch sang tiếng Việt. Bài không có ảnh vẫn hiện thành thẻ chữ.</span>
   </div>
 </main>
 <div class="modal" id="delModal" hidden role="dialog" aria-modal="true" aria-labelledby="delH">
@@ -64,7 +69,8 @@
 <script>
 const C = window.CUPCAKE, PAGE = 120;
 const H = { apikey: C.anonKey, Authorization: "Bearer " + C.anonKey };
-const st = { arts: [], srcs: {}, range: "today", q: "", offset: 0, done: false, last: null };
+const st = { arts: [], hot: [], cat: "all", range: "today", q: "", offset: 0, done: false, last: null };
+const CATS = { industry: ["Ngành", "#3B5BFF"], "ai-products": ["Sản phẩm AI", "#7C4DFF"], paper: ["Nghiên cứu", "#00B8A9"], tip: ["Mẹo", "#FFB020"], "ai-models": ["Mô hình AI", "#FF5C8A"], opinion: ["Quan điểm", "#2E9E5B"] };
 const $ = id => document.getElementById(id);
 const el = (t, props = {}, kids = []) => { const e = document.createElement(t);
   for (const k in props) { if (k === "text") e.textContent = props[k]; else if (k === "class") e.className = props[k]; else if (k === "style") e.style.cssText = props[k]; else e.setAttribute(k, props[k]); }
@@ -87,9 +93,8 @@ function savedLabel() { return "Đã lưu" + (saved.list.length ? ` (${saved.lis
 function toggleSave(a, btn) {
   const i = saved.list.findIndex(x => x.id === a.id);
   if (i >= 0) saved.list.splice(i, 1);
-  else { const s = st.srcs[a.source_id];
-    saved.list.unshift({ id: a.id, title_vi: a.title_vi, summary_vi: a.summary_vi, link: a.link, image_url: a.image_url, tags: a.tags, read_minutes: a.read_minutes,
-      created_at: a.created_at, source_id: a.source_id, source_name: a.source_name || (s && s.name), source_color: a.source_color || (s && s.color), saved_at: Date.now() }); }
+  else saved.list.unshift({ id: a.id, title_vi: a.title_vi, summary_vi: a.summary_vi, reason_vi: a.reason_vi, category: a.category, link: a.link, image_url: a.image_url, tags: a.tags,
+      published_at: a.published_at, created_at: a.created_at, source_name: a.source_name, saved_at: Date.now() });
   if (!persistSaved()) toast("Trình duyệt không cho lưu. Bạn đang ở chế độ ẩn danh?");
   const on = isSaved(a.id);
   if (st.range === "saved") { render(); return; }
@@ -99,15 +104,15 @@ function toggleSave(a, btn) {
 async function api(path) { const r = await fetch(C.url + "/rest/v1/" + path, { headers: H }); if (!r.ok) throw new Error(r.status); return r.json(); }
 
 async function load(more) {
-  const rows = await api(`articles?select=*&order=created_at.desc&limit=${PAGE}&offset=${st.offset}`);
+  const rows = await api(`articles?select=*&order=published_at.desc&limit=${PAGE}&offset=${st.offset}`);
   st.arts = st.arts.concat(rows); st.offset += rows.length; st.done = rows.length < PAGE;
 }
 async function init() {
   try {
-    const [srcs, last] = await Promise.all([
-      api("public_sources?select=*"),
+    const [hot, last] = await Promise.all([
+      api("hot_topics?select=*&order=rank.asc&limit=10"),
       fetch(C.url + "/rest/v1/rpc/public_last_run", { method: "POST", headers: { ...H, "Content-Type": "application/json" }, body: "{}" }).then(r => r.json()).catch(() => null)]);
-    srcs.forEach(s => st.srcs[s.id] = s); st.last = last;
+    st.hot = hot; st.last = last;
     await load();
   } catch (e) {
     $("upd").textContent = "Chưa kết nối được dữ liệu";
@@ -115,21 +120,21 @@ async function init() {
   }
   render();
 }
+const when = a => new Date(a.published_at || a.created_at);
 function inRange(a) {
-  const d = new Date(a.created_at), age = (Date.now() - d) / 864e5;
+  const d = when(a), age = (Date.now() - d) / 864e5;
   if (st.range === "saved") return true;
   if (st.range === "today") return vnDay(d) === vnDay(new Date());
   if (st.range === "week") return age <= 7; return true;
 }
 function visible() {
   const q = st.q.trim().toLowerCase();
-  return (st.range === "saved" ? saved.list : st.arts).filter(a => inRange(a) &&
-    (!q || (a.title_vi + " " + a.summary_vi + " " + (a.tags || []).join(" ")).toLowerCase().includes(q)));
+  return (st.range === "saved" ? saved.list : st.arts).filter(a => inRange(a) && (st.cat === "all" || a.category === st.cat) &&
+    (!q || (a.title_vi + " " + a.summary_vi + " " + (a.reason_vi || "") + " " + (a.tags || []).join(" ")).toLowerCase().includes(q)));
 }
 function render() {
-  const n = Object.keys(st.srcs).length;
   const L = st.last ? new Date(st.last) : null;
-  $("upd").textContent = (L ? `Cập nhật ${vnTime(L)}` + (vnDay(L) !== vnDay(new Date()) ? " " + vnDay(L).slice(8) + "/" + vnDay(L).slice(5, 7) : "") + " · " : "") + `${n} nguồn`;
+  $("upd").textContent = (L ? `Cập nhật ${vnTime(L)}` + (vnDay(L) !== vnDay(new Date()) ? " " + vnDay(L).slice(8) + "/" + vnDay(L).slice(5, 7) : "") : "Chưa có lần cập nhật nào");
   floaters();
   // bộ lọc thời gian
   const rg = $("ranges"); rg.replaceChildren();
@@ -137,12 +142,18 @@ function render() {
     const b = el("button", { class: "pill solid", type: "button", "aria-pressed": st.range === k, text: t });
     if (k === "saved") b.id = "savedPill";
     b.onclick = () => { st.range = k; render(); }; rg.append(b); });
+  // bộ lọc danh mục
+  const cg = $("cats"); cg.replaceChildren();
+  [["all", "Tất cả chủ đề"], ...Object.entries(CATS).map(([k, v]) => [k, v[0]])].forEach(([k, t]) => {
+    const b = el("button", { class: "pill", type: "button", "aria-pressed": st.cat === k, text: t });
+    b.onclick = () => { st.cat = k; render(); }; cg.append(b); });
+  hotTopics();
   // thẻ theo ngày
   const list = $("list"); list.replaceChildren();
   const vis = visible();
   if (!vis.length) list.append(el("div", { class: "empty", text: st.range === "saved" ? (st.q.trim() && saved.list.length ? "Không có bài đã lưu nào khớp." : "Bạn chưa lưu bài nào. Bấm biểu tượng đánh dấu ở cuối mỗi thẻ bài để lưu.") : st.range === "today" ? "Hôm nay chưa có bài mới. Thử chọn “7 ngày” hoặc “Tất cả”." : "Không có bài nào khớp." }));
   let num = 0;
-  const byDay = {}; vis.forEach(a => (byDay[vnDay(new Date(a.created_at))] ||= []).push(a));
+  const byDay = {}; vis.forEach(a => (byDay[vnDay(when(a))] ||= []).push(a));
   Object.keys(byDay).sort().reverse().forEach(key => {
     const cols = el("div", { class: "cols" });
     byDay[key].forEach(a => cols.append(card(a, ++num)));
@@ -172,7 +183,7 @@ $("delForm").onsubmit = async e => {
   } catch { $("delErr").textContent = "Không kết nối được. Thử lại."; $("delOk").disabled = false; }
 };
 function card(a, num) {
-  const s = st.srcs[a.source_id] || (a.source_name ? { name: a.source_name, color: a.source_color } : { name: "Nguồn", color: "#3B5BFF" });
+  const cat = CATS[a.category], color = cat ? cat[1] : "#3B5BFF";
   const link = safeUrl(a.link), img = safeUrl(a.image_url);
   const tint = "t" + (num % 2);
   const c = el("article", { class: "card" + (img ? "" : " big " + tint) });
@@ -185,18 +196,31 @@ function card(a, num) {
   sv.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" fill-opacity="0" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4h10v16l-5-3.6L7 20z"/></svg>';
   sv.onclick = () => toggleSave(a, sv);
   const inSaved = st.range === "saved";
-  const chipBg = /^#[0-9a-f]{6}$/i.test(s.color) ? s.color + "33" : "#E6EBFF";
+  const chipBg = color + "33";
   c.append(el("div", { class: "bd" }, [
     el("div", { class: "meta" }, [
       el("span", { class: "num", style: "background:" + chipBg, text: String(num).padStart(2, "0") }),
-      el("span", { class: "srcn", text: s.name }),
-      el("span", { text: vnTime(new Date(a.created_at)) + (a.read_minutes ? ` · ${a.read_minutes} phút đọc` : "") })]),
+      cat ? el("span", { class: "catchip", style: "background:" + chipBg, text: cat[0] }) : null,
+      el("span", { class: "srcn", text: (a.source_name || "").replace(/\s*[(（](RSS|trang web)[)）]\s*$/i, "") }),
+      el("span", { text: vnTime(when(a)) })]),
     el("h3", { text: a.title_vi }), el("p", { text: a.summary_vi }),
+    a.reason_vi ? el("p", { class: "why" }, [el("b", { text: "Vì sao đáng đọc: " }), document.createTextNode(a.reason_vi)]) : null,
     (a.tags && a.tags.length) ? el("div", { class: "tags" }, a.tags.map(t => el("span", { class: "tag", text: "#" + t }))) : null,
     el("div", { class: "foot" + (inSaved ? " nodel" : "") }, [
       link ? el("a", { class: "read", href: link, target: "_blank", rel: "noopener noreferrer", text: "ĐỌC BÀI GỐC →" }) : el("span"),
       el("span"), inSaved ? null : x, sv])]));
   return c;
+}
+
+function hotTopics() {
+  const box = $("hot"), L = $("hotList"); L.replaceChildren();
+  if (!st.hot.length || st.range === "saved") { box.hidden = true; return; }
+  box.hidden = false; $("hotCount").textContent = "[ " + st.hot.length + " chủ đề ]";
+  st.hot.forEach(t => { const link = safeUrl(t.link);
+    const body = [el("span", { class: "hrank", text: String(t.rank).padStart(2, "0") }),
+      el("span", { class: "htitle", text: t.title_vi }),
+      el("span", { class: "hmeta", text: (t.source_count ? t.source_count + " nguồn đưa tin" : "") + (t.source_name ? (t.source_count ? " · " : "") + t.source_name : "") })];
+    L.append(link ? el("a", { class: "hitem", href: link, target: "_blank", rel: "noopener noreferrer" }, body) : el("div", { class: "hitem" }, body)); });
 }
 
 // ---- Thẻ kính nổi trên laptop (chỉ máy tính) ----
@@ -212,7 +236,7 @@ function placeFloaters() {
 }
 function floaters() {
   const f = $("floaters"); f.replaceChildren();
-  const today = st.arts.filter(a => vnDay(new Date(a.created_at)) === vnDay(new Date())).slice(0, 2);
+  const today = st.arts.filter(a => vnDay(when(a)) === vnDay(new Date())).slice(0, 2);
   today.forEach(a => f.append(el("div", {}, [el("span", { class: "d", style: "background:#7CFF6B" }), el("span", { class: "lb", text: "MỚI" }), el("span", { class: "tt", text: a.title_vi })])));
   placeFloaters();
 }
