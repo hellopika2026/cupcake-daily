@@ -28,7 +28,7 @@ jobs:
             printf 'window.CUPCAKE = { url: "%s", anonKey: "%s" };\n' "$SB_URL" "$SB_ANON" > site/config.js
           fi
       - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v4
         with:
           path: site
       - id: dep
