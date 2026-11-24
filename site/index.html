@@ -48,6 +48,16 @@
     <span class="small">Bài do hệ thống tự thu thập từ các nguồn bạn chọn. Bài không có ảnh vẫn hiện thành thẻ chữ.</span>
   </div>
 </main>
+<div class="modal" id="delModal" hidden role="dialog" aria-modal="true" aria-labelledby="delH">
+  <form class="box" id="delForm">
+    <h2 id="delH">Xóa bài này?</h2>
+    <p class="ttl" id="delTitle"></p>
+    <label class="f">Mật khẩu quản trị<input class="in" id="delPw" type="password" autocomplete="current-password" required></label>
+    <div class="err" id="delErr" role="alert"></div>
+    <div class="acts"><button type="button" class="btn" id="delCancel">Hủy</button><button type="submit" class="btn danger" id="delOk">Xóa bài</button></div>
+  </form>
+</div>
+<div class="toast" id="toast" hidden></div>
 <div id="ytHolder" aria-hidden="true" style="position:fixed;left:0;bottom:0;width:2px;height:2px;overflow:hidden;opacity:0;pointer-events:none"><div id="ytp"></div></div>
 <button type="button" id="musicBtn" hidden aria-pressed="false" aria-label="Bật hoặc tắt tiếng nhạc nền" title="Nhạc nền"></button>
 <script src="config.js"></script>
@@ -120,6 +130,27 @@ function render() {
   });
   $("more").hidden = st.done; $("more").onclick = async () => { $("more").disabled = true; await load(true); $("more").disabled = false; render(); };
 }
+function toast(m) { const t = $("toast"); t.textContent = m; t.hidden = false; setTimeout(() => t.hidden = true, 2600); }
+let delTarget = null;
+function askDelete(a, cardEl) {
+  delTarget = { a, cardEl }; $("delTitle").textContent = "“" + a.title_vi + "”. Bài đã xóa sẽ không bị lấy lại.";
+  $("delPw").value = ""; $("delErr").textContent = ""; $("delOk").disabled = false; $("delModal").hidden = false; setTimeout(() => $("delPw").focus(), 30);
+}
+function closeDelete() { $("delModal").hidden = true; $("delPw").value = ""; delTarget = null; }
+$("delCancel").onclick = closeDelete;
+$("delModal").onclick = e => { if (e.target === $("delModal")) closeDelete(); };
+addEventListener("keydown", e => { if (e.key === "Escape" && !$("delModal").hidden) closeDelete(); });
+$("delForm").onsubmit = async e => {
+  e.preventDefault(); if (!delTarget) return;
+  const { a, cardEl } = delTarget, pw = $("delPw").value; $("delOk").disabled = true; $("delErr").textContent = "";
+  try {
+    const r = await fetch(C.url + "/rest/v1/rpc/admin_delete_article", { method: "POST", headers: { ...H, "Content-Type": "application/json" }, body: JSON.stringify({ pw, p_id: a.id }) });
+    const j = await r.json().catch(() => null);
+    if (!r.ok) { const m = (j && j.message) || ""; $("delErr").textContent = /mật khẩu|password|sai/i.test(m) ? "Sai mật khẩu." : (m || "Lỗi " + r.status); $("delOk").disabled = false; $("delPw").select(); return; }
+    st.arts = st.arts.filter(x => x.id !== a.id); st.offset = Math.max(0, st.offset - 1);
+    closeDelete(); toast(j ? "Đã xóa bài" : "Bài này đã được xóa trước đó"); render();
+  } catch { $("delErr").textContent = "Không kết nối được. Thử lại."; $("delOk").disabled = false; }
+};
 function card(a, num) {
   const s = st.srcs[a.source_id] || { name: "Nguồn", color: "#3B5BFF" };
   const link = safeUrl(a.link), img = safeUrl(a.image_url);
@@ -127,6 +158,9 @@ function card(a, num) {
   const c = el("article", { class: "card" + (img ? "" : " big " + tint) });
   if (img) { const im = el("img", { src: img, alt: "", loading: "lazy", referrerpolicy: "no-referrer" });
     im.onerror = () => { im.remove(); c.classList.add("big", tint); }; c.append(im); }
+  const x = el("button", { class: "xdel", type: "button", title: "Xóa bài", "aria-label": "Xóa bài: " + a.title_vi });
+  x.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 4h4M6 7l.8 12h10.4L18 7"/></svg>';
+  x.onclick = () => askDelete(a, c);
   const dom = link ? new URL(link).hostname.replace(/^www\./, "") : "";
   const chipBg = /^#[0-9a-f]{6}$/i.test(s.color) ? s.color + "33" : "#E6EBFF";
   c.append(el("div", { class: "bd" }, [
@@ -138,7 +172,7 @@ function card(a, num) {
     (a.tags && a.tags.length) ? el("div", { class: "tags" }, a.tags.map(t => el("span", { class: "tag", text: "#" + t }))) : null,
     el("div", { class: "foot" }, [
       link ? el("a", { class: "read", href: link, target: "_blank", rel: "noopener noreferrer", text: "ĐỌC BÀI GỐC →" }) : el("span"),
-      el("span", { class: "dom", text: dom })])]));
+      el("span", { class: "dom", text: dom }), x])]));
   return c;
 }
 

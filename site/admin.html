@@ -48,18 +48,6 @@
   </section>
 
   <section class="panel">
-    <h2>Quản lý bài viết <span class="small" id="artCount"></span></h2>
-    <p class="sub" style="font-size:15px">Xóa bài không muốn giữ. Bài đã xóa sẽ không bị robot hay nút “Lấy bài cũ” lấy lại.</p>
-    <div class="row">
-      <select class="in" id="a_src" aria-label="Lọc theo nguồn"><option value="">Tất cả nguồn</option></select>
-      <input class="in grow" id="a_q" placeholder="Tìm theo tiêu đề…" aria-label="Tìm bài">
-      <button class="btn" id="a_go">Tìm</button>
-    </div>
-    <div id="artList" style="display:flex;flex-direction:column;gap:10px;margin-top:12px"></div>
-    <div class="row" style="margin-top:12px"><button class="btn" id="artMore" hidden>Xem thêm</button></div>
-  </section>
-
-  <section class="panel">
     <h2>Cài đặt</h2>
     <div class="row">
       <label class="f">Giờ robot quét trên máy bạn<input class="in" id="s_local" type="time"><small>Từ giờ này, khi máy bật thì robot chạy.</small></label>
@@ -134,43 +122,6 @@ async function loadJobs() {
     if (!active && jobTimer) { clearInterval(jobTimer); jobTimer = null; toast("Lấy bài cũ đã xong"); refresh(); }
   } catch (e) { /* lần sau thử lại */ }
 }
-const AS = { offset: 0, total: 0, busy: false };
-function artRow(a) {
-  const row = el("div", { class: "src-row" });
-  const safe = /^https?:\/\//i.test(a.link || "");
-  const title = safe ? el("a", { href: a.link, target: "_blank", rel: "noopener noreferrer", text: a.title_vi, style: "font-weight:700" }) : el("b", { text: a.title_vi });
-  const meta = (a.source_name || "(nguồn đã xóa)") + " · " + new Date(a.created_at).toLocaleString("vi-VN") + (a.backfilled ? " · lấy bài cũ" : "");
-  const del = el("button", { class: "btn danger", text: "Xóa", style: "min-height:40px;padding:0 16px" });
-  del.onclick = async () => {
-    if (!confirm(`Xóa bài này?
-
-“${a.title_vi}”
-
-Bài sẽ không bị lấy lại.`)) return;
-    del.disabled = true;
-    try {
-      const ok = await rpc("admin_delete_article", { p_id: a.id });
-      row.remove(); AS.offset = Math.max(0, AS.offset - 1); AS.total = Math.max(0, AS.total - 1);
-      $("artCount").textContent = `(${AS.total})`; toast(ok ? "Đã xóa bài" : "Bài này đã được xóa trước đó");
-    } catch (e) { toast(e.message); del.disabled = false; }
-  };
-  row.append(el("div", { class: "nm" }, [title, el("span", { text: meta })]), del);
-  return row;
-}
-async function loadArticles(reset = true) {
-  if (AS.busy) return; AS.busy = true;
-  try {
-    if (reset) AS.offset = 0;
-    const r = await rpc("admin_list_articles", { p_source: $("a_src").value || null, p_q: $("a_q").value.trim(), p_limit: 20, p_offset: AS.offset });
-    const box = $("artList"); if (reset) box.replaceChildren();
-    r.items.forEach(a => box.append(artRow(a)));
-    AS.offset += r.items.length; AS.total = r.total;
-    if (reset && !r.items.length) box.append(el("div", { class: "empty", text: "Không có bài nào." }));
-    $("artMore").hidden = AS.offset >= r.total; $("artCount").textContent = `(${r.total})`;
-  } catch (e) { toast(e.message); } finally { AS.busy = false; }
-}
-$("a_go").onclick = () => loadArticles(true); $("a_src").onchange = () => loadArticles(true);
-$("a_q").onkeydown = e => { if (e.key === "Enter") loadArticles(true); }; $("artMore").onclick = () => loadArticles(false);
 async function login() {
   $("loginErr").textContent = "";
   PW = $("pw").value || PW;
@@ -211,8 +162,6 @@ async function refresh() {
   try {
     const [srcs, set, runs] = await Promise.all([rpc("admin_list_sources"), rpc("admin_get_settings"), rpc("admin_recent_runs")]);
     const list = $("srcList"); list.replaceChildren(); $("srcCount").textContent = srcs.length ? `(${srcs.length})` : "";
-    const sel = $("a_src"), cur = sel.value; sel.replaceChildren(el("option", { value: "", text: "Tất cả nguồn" }), ...srcs.map(x => el("option", { value: x.id, text: x.name })));
-    if (srcs.some(x => x.id === cur)) sel.value = cur;
     if (!srcs.length) list.append(el("div", { class: "empty", text: "Chưa có nguồn nào. Dán link ở phần trên để bắt đầu." }));
     srcs.forEach(s => {
       let status = ["st ok", "Hoạt động"];
@@ -245,7 +194,7 @@ async function refresh() {
     $("s_local").value = set.scan_time_local || "12:10"; $("s_backup").value = set.scan_time_backup || "14:00";
     $("s_max").value = set.max_per_day ?? 15; $("s_kw").value = set.keyword_filter || ""; $("s_img").checked = set.fetch_images !== false; $("s_music").value = set.music_url || "";
     $("runs").replaceChildren(...(runs.length ? runs.map(r => el("div", { text: new Date(r.started_at).toLocaleString("vi-VN") + " · " + (r.by_whom === "local" ? "máy bạn" : "GitHub") + " · " + (r.finished_at ? (r.ok ? "xong" : "lỗi") : "chưa xong") + ` · thêm ${r.added} bài` + (r.note ? " · " + r.note : "") })) : [el("div", { text: "Chưa có lần quét nào." })]));
-    loadJobs(); loadArticles(true);
+    loadJobs();
   } catch (e) { toast(e.message); }
 }
 $("saveSet").onclick = async () => {
