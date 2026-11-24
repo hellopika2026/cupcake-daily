@@ -180,6 +180,22 @@ Deno.serve(async (req) => {
           link: t.links?.original || null, source_count: t.sourceCount ?? null, signal_count: t.signalCount ?? null, latest_at: t.latestAt || null } : null;
       }).filter(Boolean);
       if (hrows.length) {
+        // Ảnh cho chủ đề nóng: dùng lại ảnh đã có (bài cùng link, hoặc chủ đề cũ), còn thiếu mới mở trang bài gốc lấy og:image
+        const imgByLink = new Map<string, string>();
+        try {
+          const lk = (hrows as any[]).map((r) => String(r.link || "")).filter(Boolean);
+          const inq = encodeURIComponent("(" + lk.map((x) => '"' + x.replace(/"/g, "") + '"').join(",") + ")");
+          const [a1, h1] = await Promise.all([
+            fetch(`${base}/rest/v1/articles?select=link,image_url&image_url=not.is.null&link=in.${inq}`, { headers: H }).then((r) => r.json()),
+            fetch(`${base}/rest/v1/hot_topics?select=link,image_url&image_url=not.is.null`, { headers: H }).then((r) => r.json()),
+          ]);
+          for (const x of [...(Array.isArray(h1) ? h1 : []), ...(Array.isArray(a1) ? a1 : [])]) if (x.link && x.image_url) imgByLink.set(x.link, x.image_url);
+        } catch { /* không có thì tự lấy ở bước sau */ }
+        for (const r of hrows as any[]) r.image_url = imgByLink.get(r.link) || null;
+        const need = (hrows as any[]).filter((r) => r.link && !r.image_url);
+        for (let k = 0; k < need.length && Date.now() - T0 < 90_000; k += 5) {
+          await Promise.all(need.slice(k, k + 5).map(async (r) => { r.image_url = await findImage(r.link); }));
+        }
         await fetch(`${base}/rest/v1/hot_topics?rank=gte.0`, { method: "DELETE", headers: H });
         const hi = await fetch(`${base}/rest/v1/hot_topics`, { method: "POST", headers: H, body: JSON.stringify(hrows) });
         if (hi.ok) hot = hrows.length;

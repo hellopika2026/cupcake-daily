@@ -17,9 +17,10 @@
   <div class="wrap">
     <div class="top">
       <div class="brand"><svg aria-hidden="true" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14l-1.6 8H6.6z"/><path d="M6 12a6 5 0 0 1 12 0"/><circle cx="12" cy="4.6" r="1.2"/></svg><span>Cupcake Daily</span></div>
-      <nav class="menu" aria-label="Menu chính"><a class="adm" href="admin.html">Quản trị</a></nav>
+      <nav class="menu" aria-label="Menu chính"><a class="note" href="https://gia-dinh-admin.pages.dev/" target="_blank" rel="noopener noreferrer">Admin note</a><a class="adm" href="admin.html">Setting</a></nav>
       <div class="mnav">
-        <a class="adm" href="admin.html" aria-label="Quản trị"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></a>
+        <a class="note" href="https://gia-dinh-admin.pages.dev/" target="_blank" rel="noopener noreferrer">Admin note</a>
+        <a class="adm" href="admin.html" aria-label="Setting" title="Setting"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></a>
       </div>
     </div>
     <div class="heroText">
@@ -223,11 +224,14 @@ function hotTopics() {
       t.source_count ? (() => { const c = el("span", { class: "hcnt" }); c.insertAdjacentHTML("afterbegin", SIG); c.append(t.source_count + " nguồn"); return c; })() : null,
       t.source_name ? el("span", { class: "hsrc", text: t.source_name }) : null]);
     const arr = el("span", { class: "harr" }); arr.innerHTML = ARROW;
-    const cls = "hitem " + (top ? "hp r" + (i + 1) : "row");
+    const img = safeUrl(t.image_url);
+    const mkImg = cls => { const im = el("img", { class: cls, src: img, alt: "", loading: "lazy", referrerpolicy: "no-referrer" }); im.onerror = () => { const w = im.closest(".himg"); if (w) { w.remove(); return; } const tw = im.closest(".hthumbwrap"); if (tw) { const r = tw.querySelector(".hrank"); r.removeAttribute("style"); tw.replaceWith(r); } else im.remove(); }; return im; };
+    const cls = "hitem " + (top ? "hp r" + (i + 1) : "row") + (img ? " hasimg" : "");
     const kids = top
-      ? [el("div", { class: "hhead" }, [el("span", { class: "hrank", text: rank }), link ? arr : null]),
+      ? [img ? el("div", { class: "himg", "aria-hidden": "true" }, [mkImg("")]) : null, el("div", { class: "hhead" }, [el("span", { class: "hrank", text: rank }), link ? arr : null]),
          el("div", { class: "hbody" }, [el("span", { class: "htitle", text: t.title_vi }), meta])]
-      : [el("span", { class: "hrank", text: rank }), el("div", { class: "hbody" }, [el("span", { class: "htitle", text: t.title_vi }), meta]), link ? arr : null];
+      : [img ? el("div", { class: "hthumbwrap" }, [mkImg("hthumb"), el("span", { class: "hrank", text: rank })]) : el("span", { class: "hrank", text: rank }),
+         el("div", { class: "hbody" }, [el("span", { class: "htitle", text: t.title_vi }), meta]), link ? arr : null];
     return link ? el("a", { class: cls, href: link, target: "_blank", rel: "noopener noreferrer" }, kids) : el("div", { class: cls }, kids);
   };
   const pod = el("div", { class: "hpod", style: "--n:" + Math.min(3, st.hot.length) }, st.hot.slice(0, 3).map((t, i) => item(t, i)));

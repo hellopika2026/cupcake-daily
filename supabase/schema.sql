@@ -297,3 +297,5 @@ alter table articles add column if not exists image_checked boolean not null def
 
 -- Tự dọn bài cũ: mỗi ngày lúc 03:00 giờ Việt Nam (20:00 UTC) xóa bài đăng cách đây hơn 6 tháng (pg_cron, đặt trực tiếp trên Supabase)
 -- select cron.schedule('cleanup-old-articles', '0 20 * * *', $job$ delete from public.articles where published_at < now() - interval '6 months' $job$);
+
+alter table hot_topics add column if not exists image_url text;  -- ảnh (og:image) của chủ đề nóng
