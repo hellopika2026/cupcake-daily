@@ -282,3 +282,6 @@ a.hitem:hover .harr{background:#fff;color:#111}
  .hpod{padding-top:4px;padding-bottom:18px}
  .card,.card.big{border-radius:22px}
 }
+
+/* Hero (phần đầu trang): giữ phông gốc */
+.scene{--mono:"JetBrains Mono",ui-monospace,monospace;--disp:"Space Grotesk","Be Vietnam Pro",sans-serif;font-family:"Be Vietnam Pro",system-ui,-apple-system,"Segoe UI",sans-serif}
