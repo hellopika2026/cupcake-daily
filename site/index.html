@@ -69,7 +69,7 @@
 <script>
 const C = window.CUPCAKE, PAGE = 120;
 const H = { apikey: C.anonKey, Authorization: "Bearer " + C.anonKey };
-const st = { arts: [], hot: [], cat: "all", range: "today", q: "", offset: 0, done: false, last: null };
+const st = { arts: [], hot: [], cat: "all", range: "all", q: "", offset: 0, done: false, last: null };
 const CATS = { industry: ["Ngành", "#3B5BFF"], "ai-products": ["Sản phẩm AI", "#7C4DFF"], paper: ["Nghiên cứu", "#00B8A9"], tip: ["Mẹo", "#FFB020"], "ai-models": ["Mô hình AI", "#FF5C8A"], opinion: ["Quan điểm", "#2E9E5B"] };
 const $ = id => document.getElementById(id);
 const el = (t, props = {}, kids = []) => { const e = document.createElement(t);
@@ -138,10 +138,10 @@ function render() {
   floaters();
   // bộ lọc thời gian
   const rg = $("ranges"); rg.replaceChildren();
-  [["today", "Hôm nay"], ["week", "7 ngày"], ["all", "Tất cả"], ["saved", savedLabel()]].forEach(([k, t]) => {
+  [["saved", savedLabel()]].forEach(([k, t]) => {
     const b = el("button", { class: "pill solid", type: "button", "aria-pressed": st.range === k, text: t });
     if (k === "saved") b.id = "savedPill";
-    b.onclick = () => { st.range = k; render(); }; rg.append(b); });
+    b.onclick = () => { st.range = st.range === k ? "all" : k; render(); }; rg.append(b); });
   // bộ lọc danh mục
   const cg = $("cats"); cg.replaceChildren();
   [["all", "Tất cả chủ đề"], ...Object.entries(CATS).map(([k, v]) => [k, v[0]])].forEach(([k, t]) => {
@@ -151,7 +151,7 @@ function render() {
   // thẻ theo ngày
   const list = $("list"); list.replaceChildren();
   const vis = visible();
-  if (!vis.length) list.append(el("div", { class: "empty", text: st.range === "saved" ? (st.q.trim() && saved.list.length ? "Không có bài đã lưu nào khớp." : "Bạn chưa lưu bài nào. Bấm biểu tượng đánh dấu ở cuối mỗi thẻ bài để lưu.") : st.range === "today" ? "Hôm nay chưa có bài mới. Thử chọn “7 ngày” hoặc “Tất cả”." : "Không có bài nào khớp." }));
+  if (!vis.length) list.append(el("div", { class: "empty", text: st.range === "saved" ? (st.q.trim() && saved.list.length ? "Không có bài đã lưu nào khớp." : "Bạn chưa lưu bài nào. Bấm biểu tượng đánh dấu ở cuối mỗi thẻ bài để lưu.") : "Không có bài nào khớp." }));
   let num = 0;
   const byDay = {}; vis.forEach(a => (byDay[vnDay(when(a))] ||= []).push(a));
   Object.keys(byDay).sort().reverse().forEach(key => {
