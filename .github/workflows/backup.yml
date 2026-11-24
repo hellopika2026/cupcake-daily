@@ -1,4 +1,4 @@
-name: Robot dự phòng (Gemini)
+name: Robot dự phòng
 on:
   schedule:
     - cron: "0 8-10 * * *"   # mỗi giờ từ 15:00 đến 17:00 giờ Việt Nam; nếu hôm nay đã quét xong thì robot tự bỏ qua
@@ -21,8 +21,6 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
           PYTHONIOENCODING: utf-8
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then

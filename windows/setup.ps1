@@ -23,4 +23,4 @@ $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatt
 $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Limited
 Register-ScheduledTask -TaskName "CupcakeDaily" -Action $action -Trigger @($t1, $t2) -Settings $settings -Principal $principal -Force | Out-Null
 Write-Host "Xong. Robot sẽ tự chạy khi máy bật (từ giờ đã cài trong trang quản trị)."
-Write-Host "Thử ngay: bấm đúp windows\test_agy.bat, rồi windows\quet_ngay.bat"
+Write-Host "Thử ngay: bấm đúp windows\quet_ngay.bat"

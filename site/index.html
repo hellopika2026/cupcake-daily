@@ -17,10 +17,10 @@
   <div class="wrap">
     <div class="top">
       <div class="brand"><svg aria-hidden="true" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14l-1.6 8H6.6z"/><path d="M6 12a6 5 0 0 1 12 0"/><circle cx="12" cy="4.6" r="1.2"/></svg><span>Cupcake Daily</span></div>
-      <nav class="menu" aria-label="Menu chính"><a href="#" id="toTop">Hôm nay</a><a class="adm" href="admin.html">Quản trị</a></nav>
+      <nav class="menu" aria-label="Menu chính"><a class="adm" href="admin.html">Quản trị</a></nav>
       <div class="mnav">
         <button type="button" id="mSearch" aria-label="Tìm bài viết"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>
-        <a class="adm" href="admin.html" aria-label="Quản trị"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#111111" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg></a>
+        <a class="adm" href="admin.html" aria-label="Quản trị"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg></a>
       </div>
     </div>
     <div class="heroText">
@@ -78,6 +78,24 @@ function dayLabel(key) {
   if (key === t) return "Hôm nay"; if (key === y) return "Hôm qua";
   const d = new Date(key + "T00:00:00Z"); return DOW[d.getUTCDay()] + ", " + key.slice(8) + "/" + key.slice(5, 7);
 }
+// ---- Bài đã lưu: nằm trong trình duyệt này (localStorage), lưu cả bản chụp bài nên vẫn xem được dù bài gốc bị xóa ----
+const SK = "cupcakeSaved";
+const saved = { list: (() => { try { const v = JSON.parse(localStorage.getItem(SK) || "[]"); return Array.isArray(v) ? v : []; } catch { return []; } })() };
+const persistSaved = () => { try { localStorage.setItem(SK, JSON.stringify(saved.list)); return true; } catch { return false; } };
+const isSaved = id => saved.list.some(x => x.id === id);
+function savedLabel() { return "Đã lưu" + (saved.list.length ? ` (${saved.list.length})` : ""); }
+function toggleSave(a, btn) {
+  const i = saved.list.findIndex(x => x.id === a.id);
+  if (i >= 0) saved.list.splice(i, 1);
+  else { const s = st.srcs[a.source_id];
+    saved.list.unshift({ id: a.id, title_vi: a.title_vi, summary_vi: a.summary_vi, link: a.link, image_url: a.image_url, tags: a.tags, read_minutes: a.read_minutes,
+      created_at: a.created_at, source_id: a.source_id, source_name: a.source_name || (s && s.name), source_color: a.source_color || (s && s.color), saved_at: Date.now() }); }
+  if (!persistSaved()) toast("Trình duyệt không cho lưu. Bạn đang ở chế độ ẩn danh?");
+  const on = isSaved(a.id);
+  if (st.range === "saved") { render(); return; }
+  btn.classList.toggle("on", on); btn.setAttribute("aria-pressed", on); btn.title = on ? "Bỏ lưu bài" : "Lưu bài";
+  const p = $("savedPill"); if (p) p.textContent = savedLabel();
+}
 async function api(path) { const r = await fetch(C.url + "/rest/v1/" + path, { headers: H }); if (!r.ok) throw new Error(r.status); return r.json(); }
 
 async function load(more) {
@@ -99,12 +117,13 @@ async function init() {
 }
 function inRange(a) {
   const d = new Date(a.created_at), age = (Date.now() - d) / 864e5;
+  if (st.range === "saved") return true;
   if (st.range === "today") return vnDay(d) === vnDay(new Date());
   if (st.range === "week") return age <= 7; return true;
 }
 function visible() {
   const q = st.q.trim().toLowerCase();
-  return st.arts.filter(a => inRange(a) &&
+  return (st.range === "saved" ? saved.list : st.arts).filter(a => inRange(a) &&
     (!q || (a.title_vi + " " + a.summary_vi + " " + (a.tags || []).join(" ")).toLowerCase().includes(q)));
 }
 function render() {
@@ -114,13 +133,14 @@ function render() {
   floaters();
   // bộ lọc thời gian
   const rg = $("ranges"); rg.replaceChildren();
-  [["today", "Hôm nay"], ["week", "7 ngày"], ["all", "Tất cả"]].forEach(([k, t]) => {
+  [["today", "Hôm nay"], ["week", "7 ngày"], ["all", "Tất cả"], ["saved", savedLabel()]].forEach(([k, t]) => {
     const b = el("button", { class: "pill solid", type: "button", "aria-pressed": st.range === k, text: t });
+    if (k === "saved") b.id = "savedPill";
     b.onclick = () => { st.range = k; render(); }; rg.append(b); });
   // thẻ theo ngày
   const list = $("list"); list.replaceChildren();
   const vis = visible();
-  if (!vis.length) list.append(el("div", { class: "empty", text: st.range === "today" ? "Hôm nay chưa có bài mới. Thử chọn “7 ngày” hoặc “Tất cả”." : "Không có bài nào khớp." }));
+  if (!vis.length) list.append(el("div", { class: "empty", text: st.range === "saved" ? (st.q.trim() && saved.list.length ? "Không có bài đã lưu nào khớp." : "Bạn chưa lưu bài nào. Bấm biểu tượng đánh dấu ở cuối mỗi thẻ bài để lưu.") : st.range === "today" ? "Hôm nay chưa có bài mới. Thử chọn “7 ngày” hoặc “Tất cả”." : "Không có bài nào khớp." }));
   let num = 0;
   const byDay = {}; vis.forEach(a => (byDay[vnDay(new Date(a.created_at))] ||= []).push(a));
   Object.keys(byDay).sort().reverse().forEach(key => {
@@ -128,7 +148,7 @@ function render() {
     byDay[key].forEach(a => cols.append(card(a, ++num)));
     list.append(el("section", { class: "day" }, [el("div", { class: "day-h" }, [el("h2", { text: dayLabel(key) }), el("span", { text: "[ " + byDay[key].length + " bài ]" })]), cols]));
   });
-  $("more").hidden = st.done; $("more").onclick = async () => { $("more").disabled = true; await load(true); $("more").disabled = false; render(); };
+  $("more").hidden = st.done || st.range === "saved"; $("more").onclick = async () => { $("more").disabled = true; await load(true); $("more").disabled = false; render(); };
 }
 function toast(m) { const t = $("toast"); t.textContent = m; t.hidden = false; setTimeout(() => t.hidden = true, 2600); }
 let delTarget = null;
@@ -152,7 +172,7 @@ $("delForm").onsubmit = async e => {
   } catch { $("delErr").textContent = "Không kết nối được. Thử lại."; $("delOk").disabled = false; }
 };
 function card(a, num) {
-  const s = st.srcs[a.source_id] || { name: "Nguồn", color: "#3B5BFF" };
+  const s = st.srcs[a.source_id] || (a.source_name ? { name: a.source_name, color: a.source_color } : { name: "Nguồn", color: "#3B5BFF" });
   const link = safeUrl(a.link), img = safeUrl(a.image_url);
   const tint = "t" + (num % 2);
   const c = el("article", { class: "card" + (img ? "" : " big " + tint) });
@@ -161,7 +181,10 @@ function card(a, num) {
   const x = el("button", { class: "xdel", type: "button", title: "Xóa bài", "aria-label": "Xóa bài: " + a.title_vi });
   x.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 4h4M6 7l.8 12h10.4L18 7"/></svg>';
   x.onclick = () => askDelete(a, c);
-  const dom = link ? new URL(link).hostname.replace(/^www\./, "") : "";
+  const sv = el("button", { class: "xsave" + (isSaved(a.id) ? " on" : ""), type: "button", "aria-pressed": isSaved(a.id), title: isSaved(a.id) ? "Bỏ lưu bài" : "Lưu bài", "aria-label": "Lưu bài: " + a.title_vi });
+  sv.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" fill-opacity="0" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4h10v16l-5-3.6L7 20z"/></svg>';
+  sv.onclick = () => toggleSave(a, sv);
+  const inSaved = st.range === "saved";
   const chipBg = /^#[0-9a-f]{6}$/i.test(s.color) ? s.color + "33" : "#E6EBFF";
   c.append(el("div", { class: "bd" }, [
     el("div", { class: "meta" }, [
@@ -170,9 +193,9 @@ function card(a, num) {
       el("span", { text: vnTime(new Date(a.created_at)) + (a.read_minutes ? ` · ${a.read_minutes} phút đọc` : "") })]),
     el("h3", { text: a.title_vi }), el("p", { text: a.summary_vi }),
     (a.tags && a.tags.length) ? el("div", { class: "tags" }, a.tags.map(t => el("span", { class: "tag", text: "#" + t }))) : null,
-    el("div", { class: "foot" }, [
+    el("div", { class: "foot" + (inSaved ? " nodel" : "") }, [
       link ? el("a", { class: "read", href: link, target: "_blank", rel: "noopener noreferrer", text: "ĐỌC BÀI GỐC →" }) : el("span"),
-      el("span", { class: "dom", text: dom }), x])]));
+      el("span"), inSaved ? null : x, sv])]));
   return c;
 }
 
@@ -194,7 +217,6 @@ function floaters() {
   placeFloaters();
 }
 addEventListener("resize", placeFloaters);
-$("toTop").onclick = e => { e.preventDefault(); scrollTo({ top: 0, behavior: "smooth" }); };
 $("readNow").onclick = e => { e.preventDefault(); $("list").scrollIntoView({ behavior: "smooth", block: "start" }); };
 $("mSearch").onclick = () => { $("q").scrollIntoView({ behavior: "smooth", block: "center" }); setTimeout(() => $("q").focus(), 350); };
 $("q").oninput = e => { st.q = e.target.value; render(); };

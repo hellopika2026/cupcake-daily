@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
-"""Cupcake Daily - robot quét nguồn, viết tóm tắt tiếng Việt, ghi vào Supabase.
+"""Cupcake Daily - robot quét nguồn, lấy nguyên bản tiêu đề + mô tả của bài, ghi vào Supabase (không dùng AI).
 
 Chạy:
-  python cupcake_robot.py --mode local  --skip-if-done-today     (trên máy bạn, ưu tiên agy)
-  python cupcake_robot.py --mode backup --skip-if-done-today     (trên GitHub, dùng Gemini API)
-  python cupcake_robot.py --test-llm                              (thử riêng phần AI)
+  python cupcake_robot.py --mode local  --skip-if-done-today     (trên máy bạn)
+  python cupcake_robot.py --mode backup --skip-if-done-today     (dự phòng trên GitHub)
   python cupcake_robot.py --dry-run                               (quét thử, không ghi gì)
 """
-import argparse, datetime as dt, html, json, os, re, shlex, subprocess, sys, tempfile, time
+import argparse, datetime as dt, html, json, os, re, sys
 from urllib.parse import urljoin, urlparse
 
 import feedparser, requests, trafilatura
@@ -150,6 +149,7 @@ def entries_from_feed_text(text):
                 img = urljoin(link, m.group(1))
         out.append({"link": link, "title": strip_html(e.get("title", "")),
                     "published": to_dt(e.get("published_parsed") or e.get("updated_parsed")),
+                    "description": strip_html(e.get("summary", "")),
                     "snippet": strip_html(body)[:4000], "image": img})
     return out
 
@@ -263,12 +263,17 @@ def fetch_article(entry, want_image):
     text = ""
     title = entry.get("title") or ""
     image = entry.get("image")
+    meta_desc = ""
     if page:
         try:
             text = trafilatura.extract(page, include_comments=False, include_tables=False) or ""
         except Exception:
             text = ""
         soup = BeautifulSoup(page, "html.parser")
+        for key in (("property", "og:description"), ("name", "description"), ("name", "twitter:description")):
+            m = soup.find("meta", attrs={key[0]: key[1]})
+            if m and m.get("content"):
+                meta_desc = strip_html(m["content"]); break
         if not title:
             og = soup.find("meta", property="og:title")
             title = (og.get("content") if og else "") or (soup.title.string if soup.title else "") or ""
@@ -282,93 +287,40 @@ def fetch_article(entry, want_image):
         text = entry.get("snippet") or text
     if not want_image:
         image = None
-    return {"title": title.strip(), "text": text.strip(), "image": image}
+    return {"title": title.strip(), "text": text.strip(), "image": image, "meta_desc": meta_desc}
 
 
-# ------------------------------------------------------------------ AI viết tóm tắt tiếng Việt
-PROMPT = """Bạn là biên tập viên của một tờ báo cá nhân tên Cupcake Daily, độc giả là người Việt Nam làm trong ngành công nghệ/kinh doanh nhưng không phải kỹ sư.
-Đọc bài dưới đây (có thể bằng tiếng Anh) và trả về DUY NHẤT một đối tượng JSON, không thêm chữ nào khác, với đúng 3 khóa:
-- "title_vi": tiêu đề tiếng Việt tự nhiên, rõ ý, tối đa 90 ký tự, không giật tít.
-- "summary_vi": tóm tắt tiếng Việt 3 đến 5 câu (khoảng 60 đến 110 từ): bài nói gì, ý chính hoặc con số quan trọng, và vì sao đáng đọc. Chỉ dùng thông tin có trong bài, không bịa. Giữ nguyên tên riêng và thuật ngữ quốc tế quen thuộc (ví dụ API, GPT, agent).
-- "tags": danh sách 1 đến 3 nhãn chủ đề ngắn (1 đến 3 từ), viết thường, ưu tiên tiếng Việt.
-
-Nguồn: {source}
-Tiêu đề gốc: {title}
-Nội dung:
-{text}
-"""
+# ------------------------------------------------------------------ Dựng tóm tắt từ mô tả gốc (không AI)
+GREETING = re.compile(r"^(hi|hello|hey|dear|xin chào|chào)\b", re.I)
 
 
-def parse_llm_json(raw):
-    raw = raw.strip()
-    raw = re.sub(r"^```(?:json)?|```$", "", raw, flags=re.M).strip()
-    m = re.search(r"\{.*\}", raw, re.S)
-    if not m:
-        raise ValueError("AI không trả về JSON")
-    d = json.loads(m.group(0))
-    t, s = str(d.get("title_vi", "")).strip(), str(d.get("summary_vi", "")).strip()
-    tags = [str(x).strip().lower() for x in (d.get("tags") or []) if str(x).strip()][:3]
-    if len(t) < 5 or len(s) < 40:
-        raise ValueError("AI trả về quá ngắn")
-    return {"title_vi": t[:200], "summary_vi": s, "tags": tags}
+def _norm(x):
+    return re.sub(r"[\W_]+", "", (x or "").lower())
 
 
-def llm_agy(prompt):
-    cmd = os.environ.get("AGY_COMMAND", "agy")
-    timeout = int(os.environ.get("AGY_TIMEOUT", "300"))
-    tmp = None
-    use_stdin = True
-    if "{prompt_file}" in cmd:
-        f = tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8")
-        f.write(prompt); f.close(); tmp = f.name
-        cmd = cmd.replace("{prompt_file}", tmp); use_stdin = False
-    elif "{prompt}" in cmd:
-        cmd = cmd.replace("{prompt}", subprocess.list2cmdline([prompt])); use_stdin = False
-    try:
-        p = subprocess.run(cmd, shell=True, input=prompt if use_stdin else None, text=True,
-                           encoding="utf-8", capture_output=True, timeout=timeout)
-    finally:
-        if tmp:
-            try: os.unlink(tmp)
-            except Exception: pass
-    if p.returncode != 0:
-        raise RuntimeError(f"agy lỗi ({p.returncode}): {(p.stderr or p.stdout)[:200]}")
-    return parse_llm_json(p.stdout)
+def clip(s, mx=500):
+    s = re.sub(r"\s+", " ", s or "").strip()
+    if len(s) <= mx:
+        return s
+    cut = s[:mx]
+    end = max(cut.rfind(". "), cut.rfind("! "), cut.rfind("? "))
+    return (cut[:end + 1] if end > mx * 0.5 else re.sub(r"\s+\S*$", "", cut) + "…").strip()
 
 
-def llm_gemini(prompt):
-    key = os.environ.get("GEMINI_API_KEY", "")
-    if not key:
-        raise RuntimeError("Chưa có GEMINI_API_KEY")
-    model = os.environ.get("GEMINI_MODEL") or "gemini-3.5-flash-lite"
-    r = requests.post(f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-                      headers={"x-goog-api-key": key, "Content-Type": "application/json"},
-                      json={"contents": [{"parts": [{"text": prompt}]}],
-                            "generationConfig": {"responseMimeType": "application/json", "temperature": 0.3}},
-                      timeout=90)
-    if r.status_code != 200:
-        raise RuntimeError(f"Gemini {r.status_code}: {r.text[:200]}")
-    parts = r.json()["candidates"][0]["content"]["parts"]
-    return parse_llm_json("".join(p.get("text", "") for p in parts))
-
-
-def summarize(source, title, text, mode):
-    prompt = PROMPT.format(source=source, title=title, text=text[:12000])
-    order = ["agy", "gemini"] if mode == "local" else ["gemini"]
-    if mode == "local" and not os.environ.get("GEMINI_API_KEY"):
-        order = ["agy"]
-    last = None
-    for name in order:
-        tries = 2 if name == "agy" else 5  # Gemini hay báo "nhu cầu cao" (503) tạm thời, nên thử lại kiên nhẫn hơn
-        for attempt in range(1, tries + 1):
-            try:
-                return (llm_agy if name == "agy" else llm_gemini)(prompt), name
-            except Exception as e:
-                last = f"{name}: {e}"
-                log(f"   AI ({name}) lần {attempt} lỗi: {str(e)[:150]}")
-                if attempt < tries:
-                    time.sleep(2 if name == "agy" else min(40, 5 * 2 ** (attempt - 1)))
-    raise RuntimeError(last or "AI lỗi")
+def build_summary(title, desc, text, target=320):
+    """Ưu tiên mô tả do tác giả viết; nếu không có hoặc trùng tiêu đề/đầu bài thì lấy vài câu đầu của bài."""
+    d = (desc or "").strip()
+    if len(d) >= 40 and _norm(d) != _norm(title) and not _norm(text).startswith(_norm(d)[:60]):
+        return clip(d)
+    out = ""
+    for sn in re.split(r"[\r\n]+|(?<=[.!?…])\s+", text or ""):
+        sn = sn.strip()
+        if len(sn) < 25 or GREETING.search(sn) or (sn.endswith(",") and len(sn) < 80):  # dòng chào đầu thư
+            continue
+        out += (" " if re.search(r"[.!?…:]$", out) else ". " if out else "") + sn
+        if len(out) >= target:
+            break
+    return clip(out)
 
 
 # ------------------------------------------------------------------ Chạy chính
@@ -377,15 +329,7 @@ def main():
     ap.add_argument("--mode", choices=["local", "backup"], default="local")
     ap.add_argument("--skip-if-done-today", action="store_true")
     ap.add_argument("--dry-run", action="store_true")
-    ap.add_argument("--test-llm", action="store_true")
     a = ap.parse_args()
-
-    if a.test_llm:
-        sample = ("Researchers released a new open model that matches larger systems on reasoning "
-                  "benchmarks while running on a single GPU. The team says training cost fell by 40 percent "
-                  "thanks to better data filtering. " * 4)
-        r, who = summarize("Nguồn thử", "A small open model rivals big ones", sample, a.mode)
-        log("OK, dùng", who); print(json.dumps(r, ensure_ascii=False, indent=2)); return
 
     db = DB()
     now = dt.datetime.now(dt.timezone.utc)
@@ -476,20 +420,21 @@ def main():
         log(f"- {e['title'][:70] or e['link']}")
         try:
             art = fetch_article(e, want_image)
-            if len(art["text"]) < 120:
-                log("   nội dung quá ngắn, bỏ qua"); mark_seen.append({"link": e["link"], "source_id": s["id"]})
+            title = art["title"] or e["title"]
+            summary = build_summary(title, e.get("description") or art["meta_desc"], art["text"])
+            if len(title) < 3 or len(summary) < 20:
+                log("   thiếu tiêu đề hoặc mô tả, bỏ qua"); mark_seen.append({"link": e["link"], "source_id": s["id"]})
                 if not a.dry_run: db.insert("seen", [{"link": e["link"], "source_id": s["id"]}], ignore_dups=True, on_conflict="link")
                 continue
             if kws:
-                hay = (art["title"] + " " + art["text"][:3000]).lower()
+                hay = (title + " " + art["text"][:3000]).lower()
                 if not any(k in hay for k in kws):
                     log("   không khớp từ khóa lọc, bỏ qua")
                     if not a.dry_run: db.insert("seen", [{"link": e["link"], "source_id": s["id"]}], ignore_dups=True, on_conflict="link")
                     continue
-            res, who = summarize(s["name"], art["title"], art["text"], a.mode)
             words = len(art["text"].split())
-            row = {"source_id": s["id"], "link": e["link"], "title_vi": res["title_vi"],
-                   "summary_vi": res["summary_vi"], "tags": res["tags"], "image_url": art["image"],
+            row = {"source_id": s["id"], "link": e["link"], "title_vi": title[:200],
+                   "summary_vi": summary, "tags": [], "image_url": art["image"],
                    "read_minutes": max(1, round(words / 200)),
                    "published_at": (e["published"] or now).isoformat()}
             if a.dry_run:
@@ -498,7 +443,7 @@ def main():
                 db.insert("articles", [row], ignore_dups=True, on_conflict="link")
                 db.insert("seen", [{"link": e["link"], "source_id": s["id"]}], ignore_dups=True, on_conflict="link")
             added += 1
-            log(f"   xong ({who})")
+            log("   xong")
         except Exception as ex:
             log("   LỖI, sẽ thử lại lần quét sau:", str(ex)[:200])
             item_errors += 1
