@@ -8,7 +8,8 @@ Tờ báo nhỏ của Cupcake, mỗi sáng một lần. Robot quét các nguồn
 - `site/`: trang đọc (`index.html`) và trang quản trị (`admin.html`).
 - `robot/`: robot Python. Chạy trên máy bạn (ưu tiên `agy`), dự phòng bằng Gemini API trên GitHub.
 - `windows/`: lịch chạy cho máy Windows.
-- `.github/workflows/`: robot dự phòng và đăng web lên GitHub Pages.
+- `.github/workflows/`: robot dự phòng.
+- `netlify.toml`: cấu hình đăng web lên Netlify (thư mục `site/`).
 
 ## Cài đặt (làm theo thứ tự)
 ### 1. Supabase
@@ -21,8 +22,7 @@ Tờ báo nhỏ của Cupcake, mỗi sáng một lần. Robot quét các nguồn
 1. Tạo repo mới (Public), tải toàn bộ thư mục này lên (nhánh `main`).
 2. Repo > Settings > **Secrets and variables > Actions**:
    - Tab *Secrets*: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` (service_role), `GEMINI_API_KEY`.
-   - Tab *Variables*: `SUPABASE_URL`, `SUPABASE_ANON_KEY` (anon public).
-3. Settings > **Pages** > Source: **GitHub Actions**. Sau đó vào tab Actions, chạy "Đăng web". Link web sẽ hiện ở đó.
+3. Đăng web bằng **Netlify**: Add new site > Import an existing project > chọn repo này. Netlify tự đọc `netlify.toml`. Khi dùng cách này, mỗi lần đẩy lên `main` web tự cập nhật. Hoặc kéo thả thư mục `site/` vào `app.netlify.com/drop`.
 
 ### 3. Máy Windows
 1. Cài Python nếu chưa có. Chép `robot\.env.example` thành `robot\.env`, điền `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, và cách gọi `agy`.
