@@ -171,3 +171,5 @@ main .panel+.panel{margin-top:0}
 .menu a.adm:hover,.menu a.adm:focus-visible{background:#fff;color:var(--ink);border-color:#fff}
 .mnav a.adm{background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.55);border-radius:99px;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
 .mnav button{border-radius:99px;background:rgba(255,255,255,.14);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+
+[hidden]{display:none!important}
