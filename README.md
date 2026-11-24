@@ -9,7 +9,7 @@ Tờ báo nhỏ của Cupcake, mỗi sáng một lần. Robot quét các nguồn
 - `robot/`: robot Python. Chạy trên máy bạn, dự phòng bằng GitHub Actions.
 - `windows/`: lịch chạy cho máy Windows.
 - `.github/workflows/`: robot dự phòng.
-- `netlify.toml`: cấu hình đăng web lên Netlify (thư mục `site/`).
+- `.github/workflows/cloudflare.yml`: tự đăng thư mục `site/` lên Cloudflare Pages (https://cupcake-daily.pages.dev) mỗi khi đẩy code lên `main`.
 
 ## Cài đặt (làm theo thứ tự)
 ### 1. Supabase
@@ -22,7 +22,7 @@ Tờ báo nhỏ của Cupcake, mỗi sáng một lần. Robot quét các nguồn
 1. Tạo repo mới (Public), tải toàn bộ thư mục này lên (nhánh `main`).
 2. Repo > Settings > **Secrets and variables > Actions**:
    - Tab *Secrets*: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` (service_role).
-3. Đăng web bằng **Netlify**: Add new site > Import an existing project > chọn repo này. Netlify tự đọc `netlify.toml`. Khi dùng cách này, mỗi lần đẩy lên `main` web tự cập nhật. Hoặc kéo thả thư mục `site/` vào `app.netlify.com/drop`.
+3. Đăng web bằng **Cloudflare Pages**: tạo dự án Pages tên `cupcake-daily`, rồi thêm 2 secret `CLOUDFLARE_API_TOKEN` (token quyền *Cloudflare Pages: Edit*) và `CLOUDFLARE_ACCOUNT_ID`. Sau đó mỗi lần đẩy lên `main` web tự cập nhật. Đăng tay: `npx wrangler pages deploy site --project-name cupcake-daily`.
 
 ### 3. Máy Windows
 1. Cài Python nếu chưa có. Chép `robot\.env.example` thành `robot\.env`, điền `SUPABASE_URL` và `SUPABASE_SERVICE_KEY`.
