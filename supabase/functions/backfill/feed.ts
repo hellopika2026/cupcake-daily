@@ -35,9 +35,13 @@ export function htmlToText(html: string): string {
 }
 
 function pickImage(block: string, html: string, base: string): string | null {
+  // Ưu tiên thumbnail. media:content bị loại khi là video/trình phát: với YouTube nó là link trình phát video (Flash), không phải ảnh.
+  const mc = block.match(/<media:content[^>]*>/i)?.[0] || "";
+  const mcUrl = mc.match(/url=["']([^"']+)["']/i)?.[1];
+  const mcIsImage = !/(type|medium)=["'](video|application|audio)/i.test(mc);
   const cands = [
-    block.match(/<media:content[^>]+url=["']([^"']+)["']/i)?.[1],
     block.match(/<media:thumbnail[^>]+url=["']([^"']+)["']/i)?.[1],
+    mcIsImage ? mcUrl : undefined,
     block.match(/<enclosure[^>]+type=["']image[^"']*["'][^>]*url=["']([^"']+)["']/i)?.[1],
     block.match(/<enclosure[^>]+url=["']([^"']+)["'][^>]*type=["']image/i)?.[1],
     html.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1],

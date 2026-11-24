@@ -127,9 +127,11 @@ def entries_from_feed_text(text):
         if not link:
             continue
         img = None
-        for key in ("media_content", "media_thumbnail"):
+        # Ưu tiên ảnh thumbnail. media:content bị loại khi là video/trình phát: với YouTube nó là link trình phát video (Flash), không phải ảnh.
+        for key in ("media_thumbnail", "media_content"):
             for m in e.get(key, []) or []:
-                if m.get("url"):
+                kind = (m.get("type") or m.get("medium") or "").lower()
+                if m.get("url") and (key == "media_thumbnail" or not kind.startswith(("video", "application", "audio"))):
                     img = m["url"]
                     break
             if img:
