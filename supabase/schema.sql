@@ -291,3 +291,6 @@ create policy "public read hot_topics" on hot_topics for select to anon, authent
 grant select on hot_topics to anon, authenticated;
 grant select, insert, update, delete on hot_topics to service_role;
 grant select, insert, update, delete on articles, runs, deleted_articles to service_role;
+
+-- Đã thử lấy ảnh (og:image) cho bài này chưa: mỗi bài chỉ thử một lần
+alter table articles add column if not exists image_checked boolean not null default false;

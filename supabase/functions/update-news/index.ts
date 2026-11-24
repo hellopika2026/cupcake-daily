@@ -21,13 +21,36 @@ async function getText(url: string, ms: number, max = 400000): Promise<string> {
   const ctl = new AbortController();
   const t = setTimeout(() => ctl.abort(), ms);
   try {
-    const r = await fetch(url, { headers: { "User-Agent": UA, Accept: "*/*" }, signal: ctl.signal, redirect: "follow" });
+    const r = await fetch(url, { headers: { "User-Agent": UA, Accept: "text/html,application/json,*/*" }, signal: ctl.signal, redirect: "follow" });
     if (!r.ok) throw new Error("HTTP " + r.status);
-    return (await r.text()).slice(0, max);
+    // đọc từng phần, dừng khi đủ `max` byte (thẻ og:image nằm ở đầu trang nên không cần tải cả trang)
+    const rd = r.body!.getReader(); const dec = new TextDecoder(); let out = "", n = 0;
+    while (n < max) { const { done, value } = await rd.read(); if (done) break; n += value.length; out += dec.decode(value, { stream: true }); }
+    try { await rd.cancel(); } catch { /* đã đọc xong */ }
+    return out;
   } finally { clearTimeout(t); }
 }
 
-// Không lấy ảnh: API không có ảnh, nên bài hiện bằng thẻ chữ có màu nền.
+// ---- Ảnh đại diện: og:image (không có thì twitter:image) của trang bài gốc. Chỉ lưu địa chỉ ảnh, không tải ảnh về. ----
+const decode = (x: string) => x.replace(/&amp;/g, "&").replace(/&#x2F;/g, "/").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+async function findImage(pageUrl: string): Promise<string | null> {
+  try {
+    const html = await getText(pageUrl, 7000, 80000);
+    const metas = html.match(/<meta[^>]*>/gi) || [];
+    for (const key of ["og:image", "twitter:image"]) {
+      for (const m of metas) {
+        if (!new RegExp(`(?:property|name)=["']${key}(?::src)?["']`, "i").test(m)) continue;
+        const c = m.match(/content=["']([^"']+)["']/i);
+        if (!c) continue;
+        const u = new URL(decode(c[1]), pageUrl);
+        if (!/^https?:$/.test(u.protocol)) continue;
+        if (/profile_images|default_profile|favicon|avatar/i.test(u.href)) continue; // ảnh đại diện tác giả, không phải ảnh bài
+        return u.href;
+      }
+    }
+  } catch { /* không lấy được thì dùng thẻ màu */ }
+  return null;
+}
 
 // ---- Dịch bằng Gemini ----
 type Tr = { id: string; title?: string; summary?: string; reason?: string; source?: string };
@@ -163,11 +186,25 @@ Deno.serve(async (req) => {
       }
     }
 
+    // 5b) Ảnh (làm sau cùng, theo nhóm 5 trang, chỉ khi còn thời gian). Mỗi bài chỉ thử một lần (image_checked).
+    let imgOk = 0;
+    try {
+      const pend = await fetch(`${base}/rest/v1/articles?select=id,link&image_checked=eq.false&order=published_at.desc&limit=40`, { headers: H }).then((r) => r.json());
+      const list: { id: string; link: string }[] = Array.isArray(pend) ? pend : [];
+      for (let k = 0; k < list.length && Date.now() - T0 < 105_000; k += 5) {
+        await Promise.all(list.slice(k, k + 5).map(async (a) => {
+          const img = await findImage(a.link);
+          await fetch(`${base}/rest/v1/articles?id=eq.${a.id}`, { method: "PATCH", headers: H, body: JSON.stringify({ image_url: img, image_checked: true }) });
+          if (img) imgOk++;
+        }));
+      }
+    } catch { /* ảnh chỉ là phần thêm, lỗi thì bỏ qua */ }
+
     // 6) Ghi lại lần chạy (trang đọc dùng để hiện "Cập nhật lần cuối")
     await fetch(`${base}/rest/v1/runs`, { method: "POST", headers: H, body: JSON.stringify({
       by_whom: by, ok: true, found: items.length, added, finished_at: new Date().toISOString(),
-      note: `Chủ đề nóng: ${hot}` + (skipped ? `; bỏ qua ${skipped} bài dịch lỗi` : "") }) });
-    return json({ ok: true, found: items.length, added, hot, skipped });
+      note: `Chủ đề nóng: ${hot}; ảnh: ${imgOk}` + (skipped ? `; bỏ qua ${skipped} bài dịch lỗi` : "") }) });
+    return json({ ok: true, found: items.length, added, hot, skipped, images: imgOk });
   } catch (e) {
     const msg = (e as Error).message || String(e);
     try { await fetch(`${base}/rest/v1/runs`, { method: "POST", headers: H, body: JSON.stringify({ by_whom: by, ok: false, finished_at: new Date().toISOString(), note: msg.slice(0, 300) }) }); } catch { /* bỏ qua */ }
