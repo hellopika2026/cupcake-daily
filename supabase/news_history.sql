@@ -4,10 +4,10 @@ language plpgsql security definer set search_path = public, extensions as $$
 begin
   if not _check_pw(pw) then raise exception 'Sai mật khẩu'; end if;
   return coalesce((select json_agg(t) from (
-    select coalesce(finished_at, started_at) as at, by_whom, ok, added, found, note
-    from runs
-    where by_whom in ('manual', 'auto') and coalesce(finished_at, started_at) > now() - interval '7 days'
-    order by coalesce(finished_at, started_at) desc
+    select coalesce(r.finished_at, r.started_at) as at, r.by_whom, r.ok, r.added, r."found", r.note
+    from runs r
+    where r.by_whom in ('manual', 'auto') and coalesce(r.finished_at, r.started_at) > now() - interval '7 days'
+    order by coalesce(r.finished_at, r.started_at) desc
     limit 200) t), '[]'::json);
 end $$;
 grant execute on function admin_news_history(text) to anon, authenticated;
