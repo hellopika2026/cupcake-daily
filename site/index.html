@@ -77,6 +77,14 @@ const el = (t, props = {}, kids = []) => { const e = document.createElement(t);
   [].concat(kids).forEach(c => c && e.append(c)); return e; };
 const vnDay = d => new Date(d.getTime() + 7 * 3600e3).toISOString().slice(0, 10);
 const vnTime = d => new Date(d.getTime() + 7 * 3600e3).toISOString().slice(11, 16);
+const ago = d => {
+  const m = Math.max(0, Math.floor((Date.now() - d.getTime()) / 6e4));
+  if (m < 1) return "Vừa xong";
+  if (m < 60) return m + " phút trước";
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + " giờ trước";
+  return Math.floor(h / 24) + " ngày trước";
+};
 const safeUrl = u => { try { const x = new URL(u); return /^https?:$/.test(x.protocol) ? x.href : null; } catch { return null; } };
 const DOW = ["Chủ nhật","Thứ Hai","Thứ Ba","Thứ Tư","Thứ Năm","Thứ Sáu","Thứ Bảy"];
 function dayLabel(key) {
@@ -202,7 +210,7 @@ function card(a, num) {
     el("div", { class: "meta" }, [
       cat ? el("span", { class: "catchip", text: cat[0] }) : null,
       el("span", { class: "srcn", text: (a.source_name || "").replace(/\s*[(（](RSS|trang web)[)）]\s*$/i, "") }),
-      el("span", { class: "mt", text: n2 + " · " + vnTime(when(a)) })]),
+      el("span", { class: "mt", text: n2 + " · " + ago(when(a)) })]),
     el("h3", { text: a.title_vi }), el("p", { text: a.summary_vi }),
     a.reason_vi ? el("p", { class: "why" }, [el("b", { text: "Vì sao đáng đọc: " }), document.createTextNode(a.reason_vi)]) : null,
     (a.tags && a.tags.length) ? el("div", { class: "tags" }, a.tags.map(t => el("span", { class: "tag", text: "#" + t }))) : null,
