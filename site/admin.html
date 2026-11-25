@@ -33,6 +33,12 @@
     <div class="small" id="updOut" style="margin-top:8px"></div>
   </section>
 
+  <section class="panel">
+    <h2>Lịch sử cập nhật tin <span class="small" id="histCount"></span></h2>
+    <p class="sub" style="font-size:15px">Mỗi lần cập nhật (tự động hoặc bấm tay) hệ thống thêm được bao nhiêu bài mới. Chỉ giữ 7 ngày gần nhất, bản cũ hơn tự xóa mỗi ngày.</p>
+    <div id="hist" class="hist"></div>
+  </section>
+
   <!-- ĐÃ ẨN (tạm không lấy bài từ RSS/YouTube). Bỏ thuộc tính hidden để dùng lại. -->
   <section class="panel" hidden>
     <h2>Thêm nguồn mới</h2>
@@ -118,8 +124,25 @@ $("updNews").onclick = async () => {
     o.textContent = `Xong: thêm ${j.added} bài mới (đã quét ${j.found} bài), ${j.hot} chủ đề nóng` + (j.skipped ? `, ${j.skipped} bài dịch lỗi bị bỏ qua` : "") + ".";
     toast(j.added ? `Đã thêm ${j.added} bài` : "Chưa có bài mới");
   } catch (e) { o.textContent = "Không cập nhật được: " + e.message; }
-  b.disabled = false;
+  b.disabled = false; loadHistory();
 };
+async function loadHistory() {
+  const box = $("hist");
+  try {
+    const rows = await rpc("admin_news_history");
+    const total = rows.filter(r => r.ok).reduce((n, r) => n + (r.added || 0), 0);
+    $("histCount").textContent = rows.length ? `(${rows.length} lần · ${total} bài mới)` : "";
+    if (!rows.length) { box.replaceChildren(el("div", { class: "empty", text: "Chưa có lần cập nhật nào trong 7 ngày qua." })); return; }
+    box.replaceChildren(...rows.map(r => {
+      const d = new Date(r.at), t = d.toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+      return el("div", { class: "hrow" }, [
+        el("span", { class: "ht", text: t }),
+        el("span", { class: "hw", text: r.by_whom === "auto" ? "Tự động" : "Bấm tay" }),
+        r.ok ? el("span", { class: "hn" + (r.added ? "" : " zero"), text: r.added ? `+${r.added} bài` : "0 bài" })
+             : el("span", { class: "hn err", text: "Lỗi", title: r.note || "" })]);
+    }));
+  } catch (e) { box.replaceChildren(el("div", { class: "empty", text: "Không tải được lịch sử: " + e.message })); }
+}
 async function checkLink(url) {
   const r = await fetch(`${C.url}/functions/v1/check-link`, { method: "POST", headers: H, body: JSON.stringify({ password: PW, url }) });
   const j = await r.json().catch(() => ({})); if (r.status === 401) throw new Error("Sai mật khẩu"); return j;
@@ -216,7 +239,7 @@ async function refresh() {
     $("s_local").value = set.scan_time_local || "12:10"; $("s_backup").value = set.scan_time_backup || "14:00";
     $("s_max").value = set.max_per_day ?? 15; $("s_kw").value = set.keyword_filter || ""; $("s_img").checked = set.fetch_images !== false; $("s_music").value = set.music_url || "";
     $("runs").replaceChildren(...(runs.length ? runs.map(r => el("div", { text: new Date(r.started_at).toLocaleString("vi-VN") + " · " + (r.by_whom === "local" ? "máy bạn" : "GitHub") + " · " + (r.finished_at ? (r.ok ? "xong" : "lỗi") : "chưa xong") + ` · thêm ${r.added} bài` + (r.note ? " · " + r.note : "") })) : [el("div", { text: "Chưa có lần quét nào." })]));
-    loadJobs();
+    loadJobs(); loadHistory();
   } catch (e) { toast(e.message); }
 }
 $("saveSet").onclick = async () => {

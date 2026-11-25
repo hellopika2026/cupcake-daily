@@ -316,3 +316,13 @@ a.hitem.hp:hover .himg img{transform:scale(1.09);opacity:.42}
 .top .mnav a.adm{width:38px;padding:0}
 .top .mnav a.adm svg{stroke:var(--ink)}
 .top .mnav a.note{padding:0 14px;font-size:13px}
+
+/* ---- Quản trị: lịch sử cập nhật tin ---- */
+.hist{display:flex;flex-direction:column;max-height:340px;overflow-y:auto;border:1.5px solid var(--ink);border-radius:12px}
+.hrow{display:flex;align-items:center;gap:14px;padding:11px 16px;border-bottom:1px solid #E4E6EC;font-size:15px}
+.hrow:last-child{border-bottom:0}
+.hrow .ht{font-family:var(--mono);font-size:13.5px;min-width:96px}
+.hrow .hw{color:var(--mute);font-size:13.5px;flex:1}
+.hrow .hn{font-weight:700;color:#127A4B}
+.hrow .hn.zero{color:var(--mute);font-weight:500}
+.hrow .hn.err{color:#B42318}
