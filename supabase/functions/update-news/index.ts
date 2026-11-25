@@ -160,6 +160,44 @@ Deno.serve(async (req) => {
     }
     if (!gkey) return json({ error: "Chưa cài GEMINI_API_KEY trong Supabase Secrets" }, 500);
 
+    // ---- Chế độ dịch lại các bài cũ bằng prompt mới (gọi: {"retranslate": true}, lặp lại đến khi remaining = 0) ----
+    if (body.retranslate === true) {
+      const pend: { id: string; external_id: string }[] = await fetch(`${base}/rest/v1/articles?select=id,external_id&tr_v2=eq.false&external_id=not.is.null&order=published_at.desc&limit=24`, { headers: H }).then((r) => r.json());
+      if (!Array.isArray(pend) || !pend.length) return json({ ok: true, retranslated: 0, unavailable: 0, remaining: 0, done: true });
+      const want = new Set(pend.map((p) => p.external_id));
+      const byId = new Map<string, any>();
+      let cursor = "", pageErr = "";
+      for (let pg = 0; pg < 4 && byId.size < want.size; pg++) {
+        try {
+          const j = JSON.parse(await getText(`${API}/items?limit=100${cursor ? "&cursor=" + encodeURIComponent(cursor) : ""}`, 25000, 3_000_000));
+          for (const it of j.items || []) if (want.has(it.id)) byId.set(it.id, it);
+          cursor = j.page?.nextCursor || "";
+          if (!j.page?.hasMore || !cursor) break;
+        } catch (e) { pageErr = (e as Error).message; break; }
+      }
+      const found = pend.filter((p) => byId.has(p.external_id));
+      const gone = pend.filter((p) => !byId.has(p.external_id));
+      // bài không còn trong API (quá cũ): không dịch lại được, giữ bản dịch cũ và đánh dấu để khỏi thử lại mãi
+      if (!pageErr) for (const g of gone) await fetch(`${base}/rest/v1/articles?id=eq.${g.id}`, { method: "PATCH", headers: H, body: JSON.stringify({ tr_v2: true }) });
+      const chunks: typeof found[] = [];
+      for (let k = 0; k < found.length; k += 8) chunks.push(found.slice(k, k + 8));
+      let done = 0, lastErr = "";
+      await Promise.all(chunks.map(async (c) => {
+        const input = c.map((p) => { const i = byId.get(p.external_id); return { id: String(i.id), title: i.title, summary: i.summary, reason: i.reason || "", source: i.source?.name || "" }; });
+        try {
+          const tr = await gemini(input, gkey);
+          for (const p of c) {
+            const x = tr.get(String(p.external_id)); const title = clean(x?.title), summary = clean(x?.summary);
+            if (!title || !summary) continue;
+            const r = await fetch(`${base}/rest/v1/articles?id=eq.${p.id}`, { method: "PATCH", headers: H, body: JSON.stringify({ title_vi: title, summary_vi: summary, reason_vi: clean(x?.reason) || null, source_name: clean(x?.source) || byId.get(p.external_id).source?.name || null, tr_v2: true }) });
+            if (r.ok) done++;
+          }
+        } catch (e) { lastErr = (e as Error).message; }
+      }));
+      const left = await fetch(`${base}/rest/v1/articles?select=id&tr_v2=eq.false&external_id=not.is.null&limit=1000`, { headers: H }).then((r) => r.json());
+      return json({ ok: true, retranslated: done, unavailable: pageErr ? 0 : gone.length, remaining: Array.isArray(left) ? left.length : -1, pageErr, lastErr });
+    }
+
     // 2) Lấy tin và chủ đề nóng từ API
     const [itemsRes, hotRes] = await Promise.all([
       getText(`${API}/items?limit=50`, 25000, 3_000_000).then(JSON.parse),
@@ -204,7 +242,7 @@ Deno.serve(async (req) => {
       rows.push({
         external_id: String(i.id), link: i.links.original, title_vi: title, summary_vi: summary,
         reason_vi: clean(t?.reason) || null, source_name: clean(t?.source) || i.source?.name || null,
-        category: i.category || null, score: Number.isFinite(i.score) ? i.score : null, image_url: null,
+        category: i.category || null, score: Number.isFinite(i.score) ? i.score : null, image_url: null, tr_v2: true,
         published_at: pub.toISOString(), tags: [],
       });
     });

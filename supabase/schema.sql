@@ -302,3 +302,5 @@ alter table hot_topics add column if not exists image_url text;  -- ảnh (og:im
 
 -- Lịch sử cập nhật tin: hàm admin_news_history (xem supabase/news_history.sql) + dọn bảng runs mỗi ngày 03:10 giờ Việt Nam, chỉ giữ 7 ngày (luôn giữ lại lần chạy thành công gần nhất)
 -- select cron.schedule('cleanup-old-runs', '10 20 * * *', $job$ delete from public.runs where coalesce(finished_at, started_at) < now() - interval '7 days' and id not in (select id from public.runs where ok order by finished_at desc nulls last limit 1) $job$);
+
+alter table articles add column if not exists tr_v2 boolean not null default false;  -- đã dịch bằng prompt biên tập mới chưa (dịch lại bài cũ)
