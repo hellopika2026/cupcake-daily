@@ -326,8 +326,13 @@ a.hitem:hover .himg{transform:scale(1.05)}
 .hrest .hitem.row>.hrank,.hrest .hitem.row .hthumb .hrank{background:none!important}
 @media(max-width:760px){
  .hrest{margin:0 -16px;padding:4px 16px 16px;gap:12px}
- .hitem.row{flex:0 0 78%;min-height:300px}
- .hitem.row>.hrank,.hitem.row .hthumb .hrank{font-size:52px}
+ /* Điện thoại: thẻ hạng 4-10 hẹp và dài (hình chữ nhật đứng, bo góc), thấy khoảng 2 thẻ mỗi màn hình và cuộn ngang */
+ .hitem.row{flex:0 0 172px;min-height:272px;border-radius:22px}
+ .hitem.row>.hrank,.hitem.row .hthumb .hrank{left:14px;top:14px;font-size:44px;line-height:.8}
+ .hitem.row .hbody{padding:14px;gap:10px}
+ .hitem.row .htitle{font-family:var(--disp);font-size:16px;line-height:1.25;letter-spacing:-.01em;-webkit-line-clamp:5}
+ .hitem.row .harr{top:12px;right:12px;width:28px;height:28px}
+ .hitem.row .hmeta{font-size:11px}
 }
 
 /* Admin note + Quản trị: một viên thuốc kính mờ gồm hai phần liền nhau; Quản trị là phần nổi (trắng) */
