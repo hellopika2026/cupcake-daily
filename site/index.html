@@ -218,24 +218,33 @@ function hotTopics() {
   box.hidden = false; $("hotCount").textContent = "[ " + st.hot.length + " chủ đề ]";
   const ARROW = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>';
   const SIG = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12a7 7 0 0 1 7-7M5 12a7 7 0 0 0 7 7M19 12a7 7 0 0 0-7-7M19 12a7 7 0 0 1-7 7"/><circle cx="12" cy="12" r="1.6"/></svg>';
+  // Ảnh của chủ đề: ưu tiên cột ảnh của chính chủ đề; không có thì mượn ảnh của bài viết có cùng link
+  const norm = u => (u || "").replace(/[#?].*$/, "").replace(/\/+$/, "");
+  const imgOf = t => { const own = safeUrl(t.image_url || t.image); if (own) return own;
+    const k = norm(t.link); const a = k && st.arts.find(x => norm(x.link) === k); return a ? safeUrl(a.image_url) : null; };
   const item = (t, i) => {
-    const link = safeUrl(t.link), top = i < 3, rank = String(t.rank ?? i + 1).padStart(2, "0");
+    const link = safeUrl(t.link), top = i < 3, rank = String(t.rank ?? i + 1).padStart(2, "0"), img = imgOf(t);
     const meta = el("div", { class: "hmeta" }, [
       t.source_count ? (() => { const c = el("span", { class: "hcnt" }); c.insertAdjacentHTML("afterbegin", SIG); c.append(t.source_count + " nguồn"); return c; })() : null,
       t.source_name ? el("span", { class: "hsrc", text: t.source_name }) : null]);
     const arr = el("span", { class: "harr" }); arr.innerHTML = ARROW;
-    const img = safeUrl(t.image_url);
-    const mkImg = cls => { const im = el("img", { class: cls, src: img, alt: "", loading: "lazy", referrerpolicy: "no-referrer" }); im.onerror = () => { const w = im.closest(".himg"); if (w) { w.remove(); return; } const tw = im.closest(".hthumbwrap"); if (tw) { const r = tw.querySelector(".hrank"); r.removeAttribute("style"); tw.replaceWith(r); } else im.remove(); }; return im; };
-    const cls = "hitem " + (top ? "hp r" + (i + 1) : "row") + (img ? " hasimg" : "");
-    const kids = top
-      ? [img ? el("div", { class: "himg", "aria-hidden": "true" }, [mkImg("")]) : null, el("div", { class: "hhead" }, [el("span", { class: "hrank", text: rank }), link ? arr : null]),
-         el("div", { class: "hbody" }, [el("span", { class: "htitle", text: t.title_vi }), meta])]
-      : [img ? el("div", { class: "hthumbwrap" }, [mkImg("hthumb"), el("span", { class: "hrank", text: rank })]) : el("span", { class: "hrank", text: rank }),
-         el("div", { class: "hbody" }, [el("span", { class: "htitle", text: t.title_vi }), meta]), link ? arr : null];
-    return link ? el("a", { class: cls, href: link, target: "_blank", rel: "noopener noreferrer" }, kids) : el("div", { class: cls }, kids);
+    const rk = el("span", { class: "hrank", text: rank });
+    const mkImg = () => el("img", { class: "himg", src: img, alt: "", loading: "lazy", referrerpolicy: "no-referrer" });
+    const cls = "hitem " + (top ? "hp r" + (i + 1) + (img ? " hasimg" : "") : "row");
+    let kids, node;
+    if (top) {
+      kids = [el("div", { class: "hhead" }, [rk, link ? arr : null]), el("div", { class: "hbody" }, [el("span", { class: "htitle", text: t.title_vi }), meta])];
+      if (img) { const im = mkImg(), sh = el("span", { class: "hshade" });
+        im.onerror = () => { im.remove(); sh.remove(); node.classList.remove("hasimg"); }; kids.unshift(im, sh); }
+    } else {
+      let lead = rk;
+      if (img) { const im = mkImg(), th = el("span", { class: "hthumb" }, [im, rk]); im.onerror = () => th.replaceWith(rk); lead = th; }
+      kids = [lead, el("div", { class: "hbody" }, [el("span", { class: "htitle", text: t.title_vi }), meta]), link ? arr : null];
+    }
+    node = link ? el("a", { class: cls, href: link, target: "_blank", rel: "noopener noreferrer" }, kids) : el("div", { class: cls }, kids);
+    return node;
   };
-  const pod = el("div", { class: "hpod", style: "--n:" + Math.min(3, st.hot.length) }, st.hot.slice(0, 3).map((t, i) => item(t, i)));
-  L.append(pod);
+  L.append(el("div", { class: "hpod", style: "--n:" + Math.min(3, st.hot.length) }, st.hot.slice(0, 3).map((t, i) => item(t, i))));
   if (st.hot.length > 3) L.append(el("div", { class: "hrest" }, st.hot.slice(3).map((t, i) => item(t, i + 3))));
 }
 
